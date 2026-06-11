@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MarkApp</string>
+    <string name="title_activity_main">MarkApp</string>
+    <string name="package_name">com.jcngcp.markapp</string>
+    <string name="custom_url_scheme">com.jcngcp.markapp</string>
+</resources>

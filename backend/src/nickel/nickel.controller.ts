@@ -17,6 +17,7 @@ import { ApiKeyGuard } from './guards/api-key.guard';
 import { RateLimitGuard } from './guards/rate-limit.guard';
 
 @Controller('api/nickel')
+@UseGuards(ApiKeyGuard, RateLimitGuard)
 export class NickelController {
   constructor(private readonly nickelService: NickelService) {}
 
@@ -26,13 +27,10 @@ export class NickelController {
   @Post('recognize')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file'))
-  @UseGuards(ApiKeyGuard)
-  @UseGuards(RateLimitGuard)
   async recognize(
-    @UploadedFile() file: any,
+    @UploadedFile() file: Express.Multer.File,
     @Body() recognizeDto: RecognizeDto,
   ) {
-    // recognizeDto.enableGLM is boolean | undefined, check truthiness
     const enableGLM = recognizeDto.enableGLM !== false;
 
     return this.nickelService.recognize(
@@ -52,7 +50,7 @@ export class NickelController {
   @Post('spraycode')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file'))
-  async recognizeSpraycode(@UploadedFile() file: any) {
+  async recognizeSpraycode(@UploadedFile() file: Express.Multer.File) {
     return this.nickelService.recognizeSpraycode({
       buffer: file?.buffer,
       mimetype: file?.mimetype,
@@ -68,7 +66,7 @@ export class NickelController {
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FilesInterceptor('files', 2))
   async compare(
-    @UploadedFiles() files: any[],
+    @UploadedFiles() files: Express.Multer.File[],
     @Body() compareDto: CompareDto,
   ) {
     if (!files || files.length === 0) {

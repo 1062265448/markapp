@@ -13,11 +13,11 @@
         <button class="clear-btn" @click="clearImage">✕</button>
       </div>
       <div class="image-actions" v-else>
-        <button class="action-btn camera" @click="openCamera">
+        <button class="action-btn camera" @click="openCamera" :disabled="cameraLoading">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 1-1.7l9-5.2a2 2 0 0 1 2 0l9 5.2A2 2 0 0 1 23 8z"/><circle cx="12" cy="13" r="4"/></svg>
           <span>拍照</span>
         </button>
-        <button class="action-btn gallery" @click="openGallery">
+        <button class="action-btn gallery" @click="openGallery" :disabled="cameraLoading">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
           <span>相册</span>
         </button>
@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import { useCamera } from '@/composables/useCamera'
 import { useToast } from '@/composables/useToast'
 import { useHistoryStore } from '@/stores/history'
@@ -71,28 +71,47 @@ const previewUrl = ref<string | null>(null)
 const barcode = ref('')
 const enableGLM = ref(true)
 const loading = ref(false)
+const cameraLoading = ref(false)
 const result = ref<RecognitionResult | null>(null)
 
+/** 将 Blob 转为 base64 data URL，用于持久化缩略图 */
+function blobToDataURL(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
 const openCamera = async () => {
-  const blob = await takePhoto()
-  if (blob) {
-    imageBlob.value = blob
-    previewUrl.value = URL.createObjectURL(blob)
+  cameraLoading.value = true
+  try {
+    const blob = await takePhoto()
+    if (blob) {
+      imageBlob.value = blob
+      if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+      previewUrl.value = URL.createObjectURL(blob)
+      result.value = null
+    }
+  } finally {
+    cameraLoading.value = false
   }
 }
 
-const openGallery = () => {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/jpeg,image/png,image/webp'
-  input.onchange = (e: any) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      imageBlob.value = file
-      previewUrl.value = URL.createObjectURL(file)
+const openGallery = async () => {
+  cameraLoading.value = true
+  try {
+    const blob = await pickFromGallery()
+    if (blob) {
+      imageBlob.value = blob
+      if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+      previewUrl.value = URL.createObjectURL(blob)
+      result.value = null
     }
+  } finally {
+    cameraLoading.value = false
   }
-  input.click()
 }
 
 const clearImage = () => {
@@ -101,6 +120,11 @@ const clearImage = () => {
   previewUrl.value = null
   result.value = null
 }
+
+// 组件卸载时清理 Object URL
+onUnmounted(() => {
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+})
 
 const doRecognize = async () => {
   if (!imageBlob.value) return warning('请先选择图片')
@@ -121,12 +145,14 @@ const doRecognize = async () => {
       } else {
         warning(`发现${res.data.errorCount}个错误和${res.data.warningCount}个警告`)
       }
-      historyStore.addRecognize(res, previewUrl.value || undefined)
+      // 使用 base64 data URL 作为缩略图，确保刷新后仍可用
+      const thumb = imageBlob.value ? await blobToDataURL(imageBlob.value) : undefined
+      historyStore.addRecognize(res, thumb)
     } else {
       danger(res.message)
     }
-  } catch (e: any) {
-    danger(e.message || '识别请求失败')
+  } catch (e: unknown) {
+    danger(e instanceof Error ? e.message : '识别请求失败')
   } finally {
     loading.value = false
   }
@@ -204,6 +230,7 @@ const doRecognize = async () => {
   transition: border-color var(--duration-micro);
 }
 .action-btn:active { border-color: var(--accent); color: var(--accent); }
+.action-btn:disabled { opacity: 0.5; }
 
 .options-section {
   margin-bottom: var(--space-5);

@@ -1,4 +1,5 @@
 import { IsOptional, IsString, IsBoolean } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class RecognizeDto {
   @IsOptional()
@@ -6,12 +7,13 @@ export class RecognizeDto {
   barcode?: string;
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return value;
+  })
   @IsBoolean()
   enableGLM?: boolean;
-}
-
-export class SpraycodeDto {
-  // 喷码识别：纯文件上传，无额外参数
 }
 
 export class CompareDto {

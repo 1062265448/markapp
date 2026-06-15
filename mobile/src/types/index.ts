@@ -147,5 +147,5 @@ export interface HistoryRecord {
   timestamp: string
   thumbnail?: string
   summary: string
-  result: RecognitionResult | SpraycodeResult | any
+  result: RecognitionResult | SpraycodeResult
 }

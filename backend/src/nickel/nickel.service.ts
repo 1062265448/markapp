@@ -85,7 +85,7 @@ export class NickelService {
       }
 
       // 1. 图像预处理
-      const originalImage = await this.imagePreprocessService.preprocess(Buffer.from(file.buffer));
+      const originalImage = await this.imagePreprocessService.preprocess(file.buffer);
 
       // 2. 并行调用三模型
       const volcStart = Date.now();
@@ -294,8 +294,7 @@ export class NickelService {
       throw new BadRequestException(`不支持的文件类型: ${file.mimetype}`);
     }
 
-    const imageBuffer = Buffer.from(file.buffer);
-    const spraycodeResult = await this.spraycodeOcrService.recognizeSpraycode(imageBuffer);
+    const spraycodeResult = await this.spraycodeOcrService.recognizeSpraycode(file.buffer);
 
     return {
       success: true,
@@ -313,8 +312,7 @@ export class NickelService {
     labelFile?: { buffer: Buffer; mimetype: string; size: number },
     labelResult?: any,
   ): Promise<any> {
-    const sprayBuffer = Buffer.from(sprayFile.buffer);
-    const sprayCodeData = await this.spraycodeOcrService.recognizeSpraycode(sprayBuffer);
+    const sprayCodeData = await this.spraycodeOcrService.recognizeSpraycode(sprayFile.buffer);
 
     let labelData: any = null;
     if (labelFile) {

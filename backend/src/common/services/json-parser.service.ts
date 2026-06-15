@@ -22,10 +22,30 @@ function cleanJsonString(str: string): string {
   cleaned = cleaned
     .replace(/,\s*}/g, '}')
     .replace(/,\s*]/g, ']')
-    .replace(/:\s*'([^']*)'/g, ': "$1"')
-    .replace(/'/g, '"');
+    .replace(/'([^']*)'\s*:/g, '"$1":')  // 修复单引号 key
+    .replace(/:\s*'([^']*)'/g, ': "$1"');  // 修复单引号 value
 
   return cleaned;
+}
+
+/**
+ * 尝试解析 JSON，成功则检查 errorKey
+ * 返回 parsed 对象或 null（解析失败）
+ */
+function tryParse(str: string, errorKey?: string): any | null {
+  try {
+    const parsed = JSON.parse(str);
+    if (errorKey && parsed[errorKey]) {
+      throw new Error(parsed.message || parsed[errorKey]);
+    }
+    return parsed;
+  } catch (e) {
+    // 如果是 errorKey 触发的错误，直接抛出
+    if (errorKey && e instanceof Error && !e.message.includes('Unexpected token') && !e.message.includes('is not valid JSON')) {
+      throw e;
+    }
+    return null;
+  }
 }
 
 /**
@@ -39,56 +59,28 @@ export function parseWithFallback(content: string, options: { errorKey?: string 
   const { errorKey } = options;
 
   // 第1层: 直接解析
-  try {
-    const parsed = JSON.parse(content);
-    if (errorKey && parsed[errorKey]) {
-      throw new Error(parsed.message || parsed[errorKey]);
-    }
-    return parsed;
-  } catch (e) {
-    /* continue */
-  }
+  const r1 = tryParse(content, errorKey);
+  if (r1 !== null) return r1;
 
   // 第2层: 提取 markdown 代码块中的 JSON
   const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlockMatch) {
-    try {
-      const parsed = JSON.parse(codeBlockMatch[1].trim());
-      if (errorKey && parsed[errorKey]) {
-        throw new Error(parsed.message || parsed[errorKey]);
-      }
-      return parsed;
-    } catch (e) {
-      /* continue */
-    }
+    const r2 = tryParse(codeBlockMatch[1].trim(), errorKey);
+    if (r2 !== null) return r2;
   }
 
   // 第3层: 定位首尾花括号
   const firstBrace = content.indexOf('{');
   const lastBrace = content.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace > firstBrace) {
-    try {
-      const parsed = JSON.parse(content.slice(firstBrace, lastBrace + 1));
-      if (errorKey && parsed[errorKey]) {
-        throw new Error(parsed.message || parsed[errorKey]);
-      }
-      return parsed;
-    } catch (e) {
-      /* continue */
-    }
+    const r3 = tryParse(content.slice(firstBrace, lastBrace + 1), errorKey);
+    if (r3 !== null) return r3;
   }
 
   // 第4层: cleanJsonString 修复后重试
-  try {
-    const cleaned = cleanJsonString(content);
-    const parsed = JSON.parse(cleaned);
-    if (errorKey && parsed[errorKey]) {
-      throw new Error(parsed.message || parsed[errorKey]);
-    }
-    return parsed;
-  } catch (e) {
-    /* continue */
-  }
+  const cleaned = cleanJsonString(content);
+  const r4 = tryParse(cleaned, errorKey);
+  if (r4 !== null) return r4;
 
   throw new Error('AI返回格式异常，无法解析为JSON');
 }

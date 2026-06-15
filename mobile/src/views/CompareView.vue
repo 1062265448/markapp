@@ -13,9 +13,13 @@
         <button class="clear-btn" @click="clearSpray">✕</button>
       </div>
       <div class="image-actions" v-else>
-        <button class="action-btn" @click="openSprayCamera">
+        <button class="action-btn" @click="openSprayCamera" :disabled="cameraLoading">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 1-1.7l9-5.2a2 2 0 0 1 2 0l9 5.2A2 2 0 0 1 23 8z"/><circle cx="12" cy="13" r="4"/></svg>
-          <span>拍照/选图</span>
+          <span>拍照</span>
+        </button>
+        <button class="action-btn" @click="openSprayGallery" :disabled="cameraLoading">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          <span>相册</span>
         </button>
       </div>
     </section>
@@ -28,9 +32,13 @@
         <button class="clear-btn" @click="clearLabel">✕</button>
       </div>
       <div class="image-actions" v-else>
-        <button class="action-btn" @click="openLabelCamera">
+        <button class="action-btn" @click="openLabelCamera" :disabled="cameraLoading">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 1-1.7l9-5.2a2 2 0 0 1 2 0l9 5.2A2 2 0 0 1 23 8z"/><circle cx="12" cy="13" r="4"/></svg>
-          <span>拍照/选图</span>
+          <span>拍照</span>
+        </button>
+        <button class="action-btn" @click="openLabelGallery" :disabled="cameraLoading">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          <span>相册</span>
         </button>
       </div>
     </section>
@@ -59,12 +67,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import { useCamera } from '@/composables/useCamera'
 import { useToast } from '@/composables/useToast'
 import { useHistoryStore } from '@/stores/history'
 import { compareSpraycode } from '@/api/nickel'
 import CompareResultCard from '@/components/CompareResultCard.vue'
+import type { SpraycodeResult } from '@/types'
 
 const { takePhoto, pickFromGallery } = useCamera()
 const { success, warning, danger } = useToast()
@@ -76,21 +85,72 @@ const labelBlob = ref<Blob | null>(null)
 const labelPreview = ref<string | null>(null)
 const barcode = ref('')
 const loading = ref(false)
-const compareResult = ref<any>(null)
+const cameraLoading = ref(false)
+const compareResult = ref<SpraycodeResult | null>(null)
+
+/** 将 Blob 转为 base64 data URL，用于持久化缩略图 */
+function blobToDataURL(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
 
 const openSprayCamera = async () => {
-  const blob = await takePhoto()
-  if (blob) {
-    sprayBlob.value = blob
-    sprayPreview.value = URL.createObjectURL(blob)
+  cameraLoading.value = true
+  try {
+    const blob = await takePhoto()
+    if (blob) {
+      sprayBlob.value = blob
+      if (sprayPreview.value) URL.revokeObjectURL(sprayPreview.value)
+      sprayPreview.value = URL.createObjectURL(blob)
+    }
+  } finally {
+    cameraLoading.value = false
+  }
+}
+
+const openSprayGallery = async () => {
+  cameraLoading.value = true
+  try {
+    const blob = await pickFromGallery()
+    if (blob) {
+      sprayBlob.value = blob
+      if (sprayPreview.value) URL.revokeObjectURL(sprayPreview.value)
+      sprayPreview.value = URL.createObjectURL(blob)
+    }
+  } finally {
+    cameraLoading.value = false
   }
 }
 
 const openLabelCamera = async () => {
-  const blob = await takePhoto()
-  if (blob) {
-    labelBlob.value = blob
-    labelPreview.value = URL.createObjectURL(blob)
+  cameraLoading.value = true
+  try {
+    const blob = await takePhoto()
+    if (blob) {
+      labelBlob.value = blob
+      if (labelPreview.value) URL.revokeObjectURL(labelPreview.value)
+      labelPreview.value = URL.createObjectURL(blob)
+    }
+  } finally {
+    cameraLoading.value = false
+  }
+}
+
+const openLabelGallery = async () => {
+  cameraLoading.value = true
+  try {
+    const blob = await pickFromGallery()
+    if (blob) {
+      labelBlob.value = blob
+      if (labelPreview.value) URL.revokeObjectURL(labelPreview.value)
+      labelPreview.value = URL.createObjectURL(blob)
+    }
+  } finally {
+    cameraLoading.value = false
   }
 }
 
@@ -107,16 +167,11 @@ const clearLabel = () => {
   labelPreview.value = null
 }
 
-const pickFile = (callback: (blob: Blob) => void) => {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/jpeg,image/png,image/webp'
-  input.onchange = (e: any) => {
-    const file = e.target.files?.[0]
-    if (file) callback(file)
-  }
-  input.click()
-}
+// 组件卸载时清理 Object URL
+onUnmounted(() => {
+  if (sprayPreview.value) URL.revokeObjectURL(sprayPreview.value)
+  if (labelPreview.value) URL.revokeObjectURL(labelPreview.value)
+})
 
 const doCompare = async () => {
   if (!sprayBlob.value) return warning('请先选择喷码图片')
@@ -137,12 +192,13 @@ const doCompare = async () => {
       } else {
         warning('对比发现不一致项')
       }
-      historyStore.addCompare(res, sprayPreview.value || undefined)
+      const thumb = sprayBlob.value ? await blobToDataURL(sprayBlob.value) : undefined
+      historyStore.addCompare(res, thumb)
     } else {
       danger(res.message || '对比失败')
     }
-  } catch (e: any) {
-    danger(e.message || '对比请求失败')
+  } catch (e: unknown) {
+    danger(e instanceof Error ? e.message : '对比请求失败')
   } finally {
     loading.value = false
   }
@@ -190,6 +246,7 @@ const doCompare = async () => {
   color: var(--text-secondary); font-size: 13px; font-weight: 500;
 }
 .action-btn:active { border-color: var(--accent); color: var(--accent); }
+.action-btn:disabled { opacity: 0.5; }
 
 .options-section { margin-bottom: var(--space-5); }
 .option-row {

@@ -1,5 +1,16 @@
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
 
+async function photoToBlob(photo: { webPath?: string }): Promise<Blob> {
+  if (!photo.webPath) {
+    throw new Error('拍照未返回有效图片路径')
+  }
+  const response = await fetch(photo.webPath)
+  if (!response.ok) {
+    throw new Error(`读取图片失败: ${response.status}`)
+  }
+  return response.blob()
+}
+
 export function useCamera() {
   const takePhoto = async (): Promise<Blob | null> => {
     try {
@@ -9,12 +20,13 @@ export function useCamera() {
         resultType: CameraResultType.Uri,
         source: CameraSource.Camera,
       })
-
-      const response = await fetch(photo.webPath!)
-      const blob = await response.blob()
-      return blob
-    } catch (e) {
-      console.warn('[Camera] 拍照取消或失败:', e)
+      return await photoToBlob(photo)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg.includes('cancelled') || msg.includes('canceled')) {
+        return null
+      }
+      console.warn('[Camera] 拍照失败:', e)
       return null
     }
   }
@@ -27,12 +39,13 @@ export function useCamera() {
         resultType: CameraResultType.Uri,
         source: CameraSource.Photos,
       })
-
-      const response = await fetch(photo.webPath!)
-      const blob = await response.blob()
-      return blob
-    } catch (e) {
-      console.warn('[Camera] 选图取消或失败:', e)
+      return await photoToBlob(photo)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg.includes('cancelled') || msg.includes('canceled')) {
+        return null
+      }
+      console.warn('[Camera] 选图失败:', e)
       return null
     }
   }

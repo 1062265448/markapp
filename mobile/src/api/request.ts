@@ -1,8 +1,10 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { Capacitor } from '@capacitor/core'
 
-const NATIVE_API_URL = 'http://192.168.10.179:3003'
 const DEV_API_URL = 'http://localhost:3003'
+
+// 原生端优先使用环境变量配置，回退到开发地址
+const NATIVE_API_URL = import.meta.env.VITE_NATIVE_API_URL || DEV_API_URL
 
 const BASE_URL = Capacitor.isNativePlatform()
   ? NATIVE_API_URL
@@ -12,7 +14,7 @@ interface RequestInstance extends Omit<AxiosInstance, 'get' | 'post' | 'put' | '
   get<R = any>(url: string, config?: AxiosRequestConfig): Promise<R>
   post<R = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<R>
   put<R = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<R>
-  delete<R = any>(url: string, config?: AxiosRequestConfig): Promise<R>
+  delete<R = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<R>
 }
 
 const request = axios.create({

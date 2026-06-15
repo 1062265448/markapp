@@ -8,6 +8,7 @@ dist/
 # Environment
 .env
 .env.*
+!.env.example
 
 # IDE
 .idea/
@@ -26,3 +27,4 @@ coverage/
 # Capacitor
 mobile/android/app/build/
 mobile/android/.gradle/
+.claude/

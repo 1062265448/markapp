@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 
 const routes = [
   {
@@ -25,15 +25,19 @@ const routes = [
     component: () => import('@/views/ResultView.vue'),
     meta: { title: '识别结果' },
   },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/',
+  },
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   routes,
 })
 
 router.beforeEach((to, _from, next) => {
-  document.title = `${to.meta.title || 'MarkApp'} — 镍板标签识别`
+  document.title = `${(to.meta as { title?: string }).title || 'MarkApp'} — 镍板标签识别`
   next()
 })
 

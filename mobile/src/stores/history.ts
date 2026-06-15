@@ -12,7 +12,9 @@ export const useHistoryStore = defineStore('history', () => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (raw) records.value = JSON.parse(raw)
-    } catch { /* ignore */ }
+    } catch (e) {
+      console.warn('[History] 加载历史记录失败:', e)
+    }
   }
 
   // 保存到 localStorage
@@ -21,7 +23,9 @@ export const useHistoryStore = defineStore('history', () => {
       // 只保留最近100条
       const toSave = records.value.slice(0, 100)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
-    } catch { /* ignore */ }
+    } catch (e) {
+      console.warn('[History] 保存历史记录失败:', e)
+    }
   }
 
   // 添加识别记录
@@ -55,8 +59,10 @@ export const useHistoryStore = defineStore('history', () => {
   }
 
   // 添加对比记录
-  function addCompare(result: any, thumbnail?: string) {
-    const summary = result.data?.summary?.overallMatch ? '对比一致' : '对比不一致'
+  function addCompare(result: RecognitionResult | SpraycodeResult, thumbnail?: string) {
+    const summary = 'summary' in result.data
+      ? ((result.data as any).summary?.overallMatch ? '对比一致' : '对比不一致')
+      : '对比完成'
     records.value.unshift({
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       type: 'compare',

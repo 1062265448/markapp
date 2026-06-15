@@ -18,8 +18,16 @@
       </div>
 
       <!-- Recognize result -->
-      <template v-if="record.type === 'recognize' && record.result?.success">
+      <template v-if="record.type === 'recognize' && isRecognitionResult(record.result) && record.result.success">
         <ResultCard :result="record.result" />
+      </template>
+
+      <!-- Recognize failure -->
+      <template v-if="record.type === 'recognize' && isRecognitionResult(record.result) && !record.result.success">
+        <div class="spraycode-section card">
+          <h3>识别失败</h3>
+          <p style="color: var(--text-tertiary); font-size: 14px;">{{ record.result.message }}</p>
+        </div>
       </template>
 
       <!-- Compare result -->
@@ -28,11 +36,11 @@
       </template>
 
       <!-- Spraycode result -->
-      <template v-if="record.type === 'spraycode'">
+      <template v-if="record.type === 'spraycode' && isSpraycodeResult(record.result)">
         <div class="spraycode-section card">
           <h3>喷码识别结果</h3>
           <div class="field-list">
-            <div class="field-row" v-for="(val, key) in spraycodeFields" :key="key">
+            <div class="field-row" v-for="(val, key) in spraycodeFields(record.result.data)" :key="key">
               <span class="field-label">{{ key }}</span>
               <span class="field-value">{{ val ?? '-' }}</span>
             </div>
@@ -44,38 +52,44 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import ResultCard from '@/components/ResultCard.vue'
 import CompareResultCard from '@/components/CompareResultCard.vue'
-import type { HistoryRecord } from '@/types'
+import type { HistoryRecord, RecognitionResult, SpraycodeResult } from '@/types'
 
 const router = useRouter()
-const route = useRoute()
 
 const record = ref<HistoryRecord | null>(null)
 
 const goBack = () => router.back()
 
-const spraycodeFields = computed(() => {
-  if (!record.value || record.value.type !== 'spraycode') return {}
-  const d = record.value.result?.data
-  if (!d) return {}
+function isRecognitionResult(r: RecognitionResult | SpraycodeResult): r is RecognitionResult {
+  return 'rawData' in (r as RecognitionResult).data || 'allPassed' in (r as RecognitionResult).data
+}
+
+function isSpraycodeResult(r: RecognitionResult | SpraycodeResult): r is SpraycodeResult {
+  return 'batchNo' in (r as SpraycodeResult).data || 'ocrEngine' in ((r as SpraycodeResult).data._aiMeta || {})
+}
+
+function spraycodeFields(data: SpraycodeResult['data']) {
   return {
-    '批号': d.batchNo,
-    '包号': d.packNo,
-    '生产日期': d.productionDate,
-    '净重': d.netWeight,
-    '毛重': d.grossWeight,
-    '块数': d.pieces,
+    '批号': data.batchNo,
+    '包号': data.packNo,
+    '生产日期': data.productionDate,
+    '净重': data.netWeight,
+    '毛重': data.grossWeight,
+    '块数': data.pieces,
   }
-})
+}
 
 onMounted(() => {
   try {
     const raw = sessionStorage.getItem('markapp_detail')
     if (raw) record.value = JSON.parse(raw)
-  } catch { /* ignore */ }
+  } catch (e) {
+    console.warn('[ResultView] 加载记录失败:', e)
+  }
 })
 </script>
 

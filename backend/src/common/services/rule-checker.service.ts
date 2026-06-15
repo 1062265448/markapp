@@ -391,7 +391,18 @@ export class RuleCheckerService {
       return { field: 'barcode', ruleType: 'crossField', passed: false, severity: 'error', original: null, message: '日期未识别' };
     }
     const normalized = dateStr.replace(/\//g, '-');
-    const dateFromBarcode = `20${barcode.productionDateCode.slice(0,2)}-${barcode.productionDateCode.slice(2,4)}-${barcode.productionDateCode.slice(4,6)}`;
+
+    // 支持 productionDateCode 或 productionDate 两种来源
+    let dateFromBarcode: string;
+    if (barcode.productionDateCode) {
+      const code = barcode.productionDateCode;
+      dateFromBarcode = `20${code.slice(0,2)}-${code.slice(2,4)}-${code.slice(4,6)}`;
+    } else if (barcode.productionDate) {
+      dateFromBarcode = barcode.productionDate;
+    } else {
+      return { field: 'barcode', ruleType: 'crossField', passed: false, severity: 'warning', original: dateStr, message: '条形码中无日期信息，无法比较' };
+    }
+
     if (normalized !== dateFromBarcode) {
       return { field: 'barcode', ruleType: 'crossField', passed: false, severity: 'error', original: dateStr, message: `日期与条形码不一致:OCR识别为 "${dateStr}"，条码中为 "${dateFromBarcode}"` };
     }

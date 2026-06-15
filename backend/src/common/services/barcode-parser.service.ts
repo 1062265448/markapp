@@ -75,7 +75,7 @@ export class BarcodeParserService {
       };
     }
 
-    const packCode = parseInt(productCode.slice(4));
+    const packCode = parseInt(productCode.slice(4), 10);
     if (packCode < 0 || packCode > 999) {
       return {
         barcode, prefix: '', month: '', day: '',
@@ -87,7 +87,7 @@ export class BarcodeParserService {
       };
     }
 
-    const workshopCode = parseInt(productCode[0]);
+    const workshopCode = parseInt(productCode[0], 10);
     if (workshopCode < 1 || workshopCode > 7) {
       return {
         barcode, prefix: '', month: '', day: '',
@@ -114,8 +114,8 @@ export class BarcodeParserService {
       batchNoSuffix: productCode.slice(1, 4),
       packCode,
       expectedPackNo: this.decodePackNo(packCode),
-      netWeightEncoded: parseInt(parts[5]),
-      expectedNetWeight: parseInt(parts[5]) / 10,
+      netWeightEncoded: parseInt(parts[5], 10),
+      expectedNetWeight: parseInt(parts[5], 10) / 10,
       parsed: true,
       message: '解析成功',
     };
@@ -175,7 +175,7 @@ export class BarcodeParserService {
 
     return {
       yearShort: match[1],
-      workshopCode: parseInt(match[2]),
+      workshopCode: parseInt(match[2], 10),
       batchSuffix: match[3],
     };
   }

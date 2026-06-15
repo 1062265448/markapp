@@ -5,7 +5,7 @@
       <button class="clear-all" v-if="records.length > 0" @click="confirmClear">清空</button>
     </header>
 
-    <div class="empty" v-if="records.length === 0">
+    <div class="empty" v-if="records.length === 0 && !loading">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" stroke-width="1.2">
         <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
       </svg>
@@ -27,10 +27,27 @@
             <span class="badge" :class="record.type">{{ typeLabels[record.type] }}</span>
             <span class="record-time">{{ formatTime(record.timestamp) }}</span>
           </div>
-          <p class="record-summary">{{ record.summary }}</p>
+          <p class="record-summary">
+            {{ record.summary }}
+            <span v-if="record.matchedCount != null && record.totalFields != null" class="match-badge" :class="record.overallMatch ? 'pass' : 'fail'">
+              {{ record.matchedCount }}/{{ record.totalFields }}
+            </span>
+          </p>
         </div>
         <button class="delete-btn" @click.stop="removeRecord(record.id)">✕</button>
       </div>
+
+      <!-- Load more -->
+      <div class="load-more" v-if="hasMore">
+        <button class="btn-load" @click="loadMoreRecords" :disabled="loading">
+          {{ loading ? '加载中...' : '加载更多' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading spinner for initial load -->
+    <div class="loading" v-if="loading && records.length === 0">
+      <span class="spinner"></span>
     </div>
   </div>
 </template>
@@ -40,6 +57,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHistoryStore } from '@/stores/history'
 import { useToast } from '@/composables/useToast'
+import { fetchRecordDetail } from '@/api/nickel'
 import type { HistoryRecord } from '@/types'
 
 const router = useRouter()
@@ -53,6 +71,8 @@ const typeLabels: Record<string, string> = {
 }
 
 const records = computed(() => historyStore.records)
+const loading = computed(() => historyStore.loading)
+const hasMore = computed(() => historyStore.hasMore)
 
 const formatTime = (ts: string) => {
   const d = new Date(ts)
@@ -63,10 +83,37 @@ const formatTime = (ts: string) => {
   return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) + ' ' + time
 }
 
-const viewDetail = (record: HistoryRecord) => {
-  // 将结果暂存到 sessionStorage 供详情页读取
-  sessionStorage.setItem('markapp_detail', JSON.stringify(record))
-  router.push('/result/' + record.id)
+const viewDetail = async (record: HistoryRecord) => {
+  // 从服务端获取完整记录详情
+  try {
+    const res = await fetchRecordDetail(record.id)
+    if (res.success && res.data) {
+      const detail = {
+        id: res.data.id,
+        type: 'compare',
+        timestamp: res.data.createdAt,
+        thumbnail: res.data.images?.find(i => i.imageType === 'spraycode')?.url || undefined,
+        summary: res.data.summary?.overallMatch ? '对比一致' : '对比不一致',
+        result: {
+          success: true,
+          data: {
+            id: res.data.id,
+            compareResults: res.data.compareResults,
+            summary: res.data.summary,
+            sprayCodeData: res.data.sprayCodeData,
+          },
+          message: res.data.message,
+          timestamp: res.data.createdAt,
+        },
+      }
+      sessionStorage.setItem('markapp_detail', JSON.stringify(detail))
+      router.push('/result/' + record.id)
+    }
+  } catch (e) {
+    // 降级：使用本地缓存
+    sessionStorage.setItem('markapp_detail', JSON.stringify(record))
+    router.push('/result/' + record.id)
+  }
 }
 
 const removeRecord = (id: string) => {
@@ -78,6 +125,10 @@ const confirmClear = () => {
     historyStore.clear()
     success('历史记录已清空')
   }
+}
+
+const loadMoreRecords = () => {
+  historyStore.loadMore()
 }
 </script>
 
@@ -153,6 +204,15 @@ const confirmClear = () => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.match-badge {
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+}
+.match-badge.pass { background: var(--green-soft); color: var(--green); }
+.match-badge.fail { background: var(--red-soft); color: var(--red); }
 .delete-btn {
   width: 24px; height: 24px;
   color: var(--text-tertiary);
@@ -162,4 +222,25 @@ const confirmClear = () => {
   flex-shrink: 0;
 }
 .delete-btn:active { color: var(--red); }
+
+.load-more {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-4) 0;
+}
+.btn-load {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 500;
+  padding: var(--space-2) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.btn-load:disabled { opacity: 0.5; }
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-8);
+}
 </style>

@@ -1,34 +1,78 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { HistoryRecord, RecognitionResult, SpraycodeResult } from '@/types'
-
-const STORAGE_KEY = 'markapp_history'
+import type { HistoryRecord, HistoryListItem, RecognitionResult, SpraycodeResult, CompareResult } from '@/types'
+import { fetchHistory, deleteHistoryRecord } from '@/api/nickel'
 
 export const useHistoryStore = defineStore('history', () => {
   const records = ref<HistoryRecord[]>([])
+  const loading = ref(false)
+  const total = ref(0)
+  const page = ref(1)
+  const limit = ref(20)
+  const totalPages = ref(0)
 
-  // 从 localStorage 加载
-  function load() {
+  // 从服务端加载历史记录
+  async function load(pageNum?: number, limitNum?: number) {
+    if (pageNum !== undefined) page.value = pageNum
+    if (limitNum !== undefined) limit.value = limitNum
+
+    loading.value = true
     try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) records.value = JSON.parse(raw)
+      const res = await fetchHistory(page.value, limit.value)
+      if (res.success && res.data) {
+        const items: HistoryListItem[] = res.data.items
+        records.value = items.map((item) => ({
+          id: item.id,
+          type: 'compare',
+          timestamp: item.createdAt,
+          thumbnail: item.spraycodeImageUrl || undefined,
+          summary: item.overallMatch ? '对比一致' : '对比不一致',
+          overallMatch: item.overallMatch,
+          matchedCount: item.matchedCount,
+          totalFields: item.totalFields,
+        }))
+        total.value = res.data.total
+        totalPages.value = res.data.totalPages
+      }
     } catch (e) {
       console.warn('[History] 加载历史记录失败:', e)
+    } finally {
+      loading.value = false
     }
   }
 
-  // 保存到 localStorage
-  function persist() {
-    try {
-      // 只保留最近100条
-      const toSave = records.value.slice(0, 100)
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
-    } catch (e) {
-      console.warn('[History] 保存历史记录失败:', e)
+  // 加载更多（下一页）
+  async function loadMore() {
+    if (page.value < totalPages.value) {
+      page.value++
+      loading.value = true
+      try {
+        const res = await fetchHistory(page.value, limit.value)
+        if (res.success && res.data) {
+          const newItems: HistoryListItem[] = res.data.items
+          const newRecords = newItems.map((item) => ({
+            id: item.id,
+            type: 'compare' as const,
+            timestamp: item.createdAt,
+            thumbnail: item.spraycodeImageUrl || undefined,
+            summary: item.overallMatch ? '对比一致' : '对比不一致',
+            overallMatch: item.overallMatch,
+            matchedCount: item.matchedCount,
+            totalFields: item.totalFields,
+          }))
+          records.value = [...records.value, ...newRecords]
+          total.value = res.data.total
+          totalPages.value = res.data.totalPages
+        }
+      } catch (e) {
+        console.warn('[History] 加载更多失败:', e)
+      } finally {
+        loading.value = false
+      }
     }
   }
 
-  // 添加识别记录
+  // 添加识别记录（本地缓存，服务端已保存）
   function addRecognize(result: RecognitionResult, thumbnail?: string) {
     const summary = result.success
       ? (result.data.allPassed ? '校验全部通过' : `发现${result.data.errorCount}错误/${result.data.warningCount}警告`)
@@ -42,7 +86,6 @@ export const useHistoryStore = defineStore('history', () => {
       summary,
       result,
     })
-    persist()
   }
 
   // 添加喷码识别记录
@@ -55,41 +98,59 @@ export const useHistoryStore = defineStore('history', () => {
       summary: result.success ? '喷码识别成功' : '喷码识别失败',
       result,
     })
-    persist()
   }
 
-  // 添加对比记录
-  function addCompare(result: RecognitionResult | SpraycodeResult, thumbnail?: string) {
-    const summary = 'summary' in result.data
-      ? ((result.data as any).summary?.overallMatch ? '对比一致' : '对比不一致')
-      : '对比完成'
+  // 添加对比记录（使用服务端返回的 id）
+  function addCompare(result: CompareResult, thumbnail?: string) {
+    const summary = result.data.summary?.overallMatch ? '对比一致' : '对比不一致'
+
     records.value.unshift({
-      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      id: result.data.id,
       type: 'compare',
       timestamp: result.timestamp,
       thumbnail,
       summary,
+      overallMatch: result.data.summary?.overallMatch,
+      matchedCount: result.data.summary?.matched,
+      totalFields: result.data.summary?.total,
       result,
     })
-    persist()
   }
 
   // 删除记录
-  function remove(id: string) {
-    records.value = records.value.filter(r => r.id !== id)
-    persist()
+  async function remove(id: string) {
+    try {
+      await deleteHistoryRecord(id)
+      records.value = records.value.filter(r => r.id !== id)
+      total.value = Math.max(0, total.value - 1)
+    } catch (e) {
+      console.warn('[History] 删除记录失败:', e)
+      // 即使服务端失败，也尝试本地移除
+      records.value = records.value.filter(r => r.id !== id)
+    }
   }
 
-  // 清空
-  function clear() {
+  // 清空（逐个删除）
+  async function clear() {
+    const ids = records.value.map(r => r.id)
+    for (const id of ids) {
+      try {
+        await deleteHistoryRecord(id)
+      } catch { /* ignore */ }
+    }
     records.value = []
-    localStorage.removeItem(STORAGE_KEY)
+    total.value = 0
+    totalPages.value = 0
   }
 
   const recent = computed(() => records.value.slice(0, 20))
+  const hasMore = computed(() => page.value < totalPages.value)
 
   // 初始化加载
   load()
 
-  return { records, recent, addRecognize, addSpraycode, addCompare, remove, clear, load }
+  return {
+    records, recent, loading, total, page, totalPages, hasMore,
+    addRecognize, addSpraycode, addCompare, remove, clear, load, loadMore,
+  }
 })

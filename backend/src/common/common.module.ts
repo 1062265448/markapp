@@ -11,6 +11,7 @@ import { SpraycodeOcrService } from './services/spraycode-ocr.service';
 import { SpraycodeCompareService } from './services/spraycode-compare.service';
 import { NickelPromptService } from './services/nickel-prompt.service';
 import { JsonParserService } from './services/json-parser.service';
+import { ImageStorageService } from './services/image-storage.service';
 
 @Global()
 @Module({
@@ -27,6 +28,7 @@ import { JsonParserService } from './services/json-parser.service';
     SpraycodeCompareService,
     NickelPromptService,
     JsonParserService,
+    ImageStorageService,
   ],
   exports: [
     ImagePreprocessService,
@@ -40,6 +42,7 @@ import { JsonParserService } from './services/json-parser.service';
     SpraycodeCompareService,
     NickelPromptService,
     JsonParserService,
+    ImageStorageService,
   ],
 })
 export class CommonModule {}

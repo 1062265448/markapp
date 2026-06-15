@@ -77,6 +77,36 @@ export class NickelConfigService {
     return this.configService.get<number>('MAX_IMAGE_SIZE', 10485760);
   }
 
+  // MySQL
+  get mysqlHost(): string {
+    return this.configService.get<string>('MYSQL_HOST', 'localhost');
+  }
+
+  get mysqlPort(): number {
+    return this.configService.get<number>('MYSQL_PORT', 3306);
+  }
+
+  get mysqlUsername(): string {
+    return this.configService.get<string>('MYSQL_USERNAME', 'root');
+  }
+
+  get mysqlPassword(): string {
+    return this.configService.get<string>('MYSQL_PASSWORD', '');
+  }
+
+  get mysqlDatabase(): string {
+    return this.configService.get<string>('MYSQL_DATABASE', 'markapp');
+  }
+
+  // Image Storage
+  get imageUploadDir(): string {
+    return this.configService.get<string>('IMAGE_UPLOAD_DIR', 'uploads');
+  }
+
+  get imageRetentionDays(): number {
+    return this.configService.get<number>('IMAGE_RETENTION_DAYS', 10);
+  }
+
   isProduction(): boolean {
     return this.nodeEnv === 'production';
   }

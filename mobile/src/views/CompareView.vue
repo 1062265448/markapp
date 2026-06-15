@@ -73,7 +73,7 @@ import { useToast } from '@/composables/useToast'
 import { useHistoryStore } from '@/stores/history'
 import { compareSpraycode } from '@/api/nickel'
 import CompareResultCard from '@/components/CompareResultCard.vue'
-import type { SpraycodeResult } from '@/types'
+import type { CompareResult } from '@/types'
 
 const { takePhoto, pickFromGallery } = useCamera()
 const { success, warning, danger } = useToast()
@@ -86,17 +86,7 @@ const labelPreview = ref<string | null>(null)
 const barcode = ref('')
 const loading = ref(false)
 const cameraLoading = ref(false)
-const compareResult = ref<SpraycodeResult | null>(null)
-
-/** 将 Blob 转为 base64 data URL，用于持久化缩略图 */
-function blobToDataURL(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(blob)
-  })
-}
+const compareResult = ref<CompareResult | null>(null)
 
 const openSprayCamera = async () => {
   cameraLoading.value = true
@@ -192,7 +182,10 @@ const doCompare = async () => {
       } else {
         warning('对比发现不一致项')
       }
-      const thumb = sprayBlob.value ? await blobToDataURL(sprayBlob.value) : undefined
+      // 服务端已保存记录，缩略图使用服务端图片 URL
+      const thumb = res.data?.id
+        ? `/api/nickel/images/${res.data.id}/spraycode`
+        : undefined
       historyStore.addCompare(res, thumb)
     } else {
       danger(res.message || '对比失败')

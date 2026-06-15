@@ -1,5 +1,58 @@
 # Changelog
 
+## [1.2.0] - 2026-06-15
+
+### 🗄️ 数据库持久化（喷码对比模块）
+
+- 新增 MySQL 数据库支持（TypeORM + `@nestjs/typeorm`），开发模式自动建表
+- 新增 `compare_record` 表：永久保留所有对比记录（含摘要列 + JSON 大字段）
+- 新增 `compare_image` 表：图片引用表（FK CASCADE，10天自动清理）
+- 新增 `NickelHistoryService`：保存/查询/详情/删除/定时清理
+- 新增 `ImageStorageService`：本地文件系统图片存储（按日期目录 `uploads/compare/YYYY/MM/DD/`）
+- 新增 `@nestjs/schedule` 定时任务：每天凌晨 2:30 清理过期图片文件
+- `POST /api/nickel/compare` 返回值新增 `data.id`（向后兼容），对比后自动保存记录+图片
+- `GET /api/nickel/history` 实现分页历史列表（支持 `page`/`limit` 参数）
+- `GET /api/nickel/history/:id` 新增记录详情端点（含完整对比结果+图片URL）
+- `GET /api/nickel/images/:recordId/:imageType` 新增图片流式返回端点（过期返回 404）
+- `DELETE /api/nickel/history/:id` 新增删除记录+图片端点
+- `NickelConfigService` 新增 MySQL 配置（host/port/username/password/database）+ 图片存储配置（uploadDir/retentionDays）
+- `.env.example` 新增 `MYSQL_*` 和 `IMAGE_*` 环境变量
+
+### 📱 移动端适配（服务端历史记录）
+
+- `api/nickel.ts` 新增 `fetchHistory()`/`fetchRecordDetail()`/`deleteHistoryRecord()`
+- `stores/history.ts` 从 localStorage 迁移为服务端 API 驱动（分页+加载更多+本地缓存即时反馈）
+- `types/index.ts` 新增 `CompareResult`/`HistoryListItem`/`HistoryListResponse`/`RecordDetailResponse` 类型
+- `HistoryView.vue` 使用服务端历史+分页加载+匹配度徽章
+- `CompareView.vue` 使用服务端图片 URL 做缩略图，移除 `blobToDataURL`
+- `ResultView.vue` 类型判别函数兼容 `CompareResult` 类型
+- 新增 `mobile/.env` 配置 `VITE_NATIVE_API_URL`
+
+### 🐳 Docker 部署
+
+- MySQL 8.0 容器化部署（`markapp-mysql`，端口 3307，utf8mb4 字符集，持久化数据卷）
+
+### 🧪 测试
+
+- 新增 2 个测试套件，23 个测试用例：
+  - `nickel-history.service.spec.ts` — 保存/分页查询/详情/删除/图片信息/NotFoundException
+  - `image-storage.service.spec.ts` — 保存/删除/存在检查/路径解析/批量清理
+- 总测试数：107 passed（原 84 → 107）
+
+### 📦 新增依赖
+
+- `@nestjs/typeorm` — NestJS TypeORM 集成
+- `typeorm` — ORM 核心
+- `mysql2` — MySQL 驱动
+- `@nestjs/schedule` — 定时任务支持
+
+### 📝 文档
+
+- `.gitignore` 新增 `uploads/` 忽略
+- `backend/.env` 创建（MySQL 连接配置）
+
+---
+
 ## [1.1.0] - 2026-06-15
 
 ### 🔒 安全修复

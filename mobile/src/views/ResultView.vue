@@ -56,7 +56,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import ResultCard from '@/components/ResultCard.vue'
 import CompareResultCard from '@/components/CompareResultCard.vue'
-import type { HistoryRecord, RecognitionResult, SpraycodeResult } from '@/types'
+import type { HistoryRecord, RecognitionResult, SpraycodeResult, CompareResult } from '@/types'
 
 const router = useRouter()
 
@@ -64,12 +64,12 @@ const record = ref<HistoryRecord | null>(null)
 
 const goBack = () => router.back()
 
-function isRecognitionResult(r: RecognitionResult | SpraycodeResult): r is RecognitionResult {
-  return 'rawData' in (r as RecognitionResult).data || 'allPassed' in (r as RecognitionResult).data
+function isRecognitionResult(r: RecognitionResult | SpraycodeResult | CompareResult | undefined): r is RecognitionResult {
+  return !!r && 'rawData' in (r as RecognitionResult).data || 'allPassed' in (r as RecognitionResult).data
 }
 
-function isSpraycodeResult(r: RecognitionResult | SpraycodeResult): r is SpraycodeResult {
-  return 'batchNo' in (r as SpraycodeResult).data || 'ocrEngine' in ((r as SpraycodeResult).data._aiMeta || {})
+function isSpraycodeResult(r: RecognitionResult | SpraycodeResult | CompareResult | undefined): r is SpraycodeResult {
+  return !!r && 'batchNo' in (r as SpraycodeResult).data || 'ocrEngine' in ((r as SpraycodeResult).data._aiMeta || {})
 }
 
 function spraycodeFields(data: SpraycodeResult['data']) {

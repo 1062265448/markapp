@@ -1,5 +1,5 @@
 import request from './request'
-import type { RecognitionResult, SpraycodeResult } from '@/types'
+import type { RecognitionResult, SpraycodeResult, CompareResult, HistoryListResponse, RecordDetailResponse } from '@/types'
 
 /**
  * 识别镍板标签
@@ -42,7 +42,7 @@ export async function compareSpraycode(
   sprayFile: File | Blob,
   labelFile?: File | Blob,
   barcode?: string,
-): Promise<any> {
+): Promise<CompareResult> {
   const formData = new FormData()
   formData.append('files', sprayFile)
   if (labelFile) formData.append('files', labelFile)
@@ -52,6 +52,30 @@ export async function compareSpraycode(
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 120000,
   })
+}
+
+/**
+ * 获取历史记录列表
+ */
+export async function fetchHistory(
+  page: number = 1,
+  limit: number = 20,
+): Promise<HistoryListResponse> {
+  return request.get('/api/nickel/history', { params: { page, limit } })
+}
+
+/**
+ * 获取记录详情
+ */
+export async function fetchRecordDetail(id: string): Promise<RecordDetailResponse> {
+  return request.get(`/api/nickel/history/${id}`)
+}
+
+/**
+ * 删除历史记录
+ */
+export async function deleteHistoryRecord(id: string): Promise<{ success: boolean; message: string }> {
+  return request.delete(`/api/nickel/history/${id}`)
 }
 
 /**

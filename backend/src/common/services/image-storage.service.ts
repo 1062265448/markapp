@@ -1,0 +1,110 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { NickelConfigService } from '../../config/config.service';
+import * as fs from 'fs';
+import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+
+@Injectable()
+export class ImageStorageService {
+  private readonly logger = new Logger(ImageStorageService.name);
+  private readonly uploadDir: string;
+
+  constructor(private config: NickelConfigService) {
+    this.uploadDir = path.resolve(config.imageUploadDir);
+  }
+
+  /**
+   * 保存图片到本地文件系统
+   * @returns 相对路径 (如 compare/2026/06/15/uuid_spraycode.jpg)
+   */
+  async saveImage(
+    buffer: Buffer,
+    mimeType: string,
+    recordId: string,
+    imageType: 'spraycode' | 'label',
+  ): Promise<string> {
+    const now = new Date();
+    const year = now.getFullYear().toString();
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+
+    const ext = this._extFromMime(mimeType);
+    const fileName = `${recordId}_${imageType}${ext}`;
+    const relativeDir = path.join('compare', year, month, day);
+    const absoluteDir = path.join(this.uploadDir, relativeDir);
+
+    // 确保目录存在
+    fs.mkdirSync(absoluteDir, { recursive: true });
+
+    const relativePath = path.join(relativeDir, fileName);
+    const absolutePath = path.join(this.uploadDir, relativePath);
+
+    fs.writeFileSync(absolutePath, buffer);
+    this.logger.log(`图片已保存: ${relativePath} (${buffer.length} bytes)`);
+
+    return relativePath.replace(/\\/g, '/');
+  }
+
+  /**
+   * 删除单个图片文件
+   */
+  async deleteImage(relativePath: string): Promise<boolean> {
+    const absolutePath = path.join(this.uploadDir, relativePath);
+    try {
+      if (fs.existsSync(absolutePath)) {
+        fs.unlinkSync(absolutePath);
+        this.logger.log(`图片已删除: ${relativePath}`);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      this.logger.warn(`图片删除失败: ${relativePath} - ${(e as Error).message}`);
+      return false;
+    }
+  }
+
+  /**
+   * 获取图片的绝对路径
+   */
+  getAbsolutePath(relativePath: string): string {
+    return path.join(this.uploadDir, relativePath);
+  }
+
+  /**
+   * 检查图片文件是否存在
+   */
+  imageExists(relativePath: string): boolean {
+    return fs.existsSync(path.join(this.uploadDir, relativePath));
+  }
+
+  /**
+   * 清理超过指定天数的图片文件
+   * @returns 已删除的文件数
+   */
+  async cleanupExpiredImages(
+    filePaths: string[],
+  ): Promise<number> {
+    let deleted = 0;
+    for (const fp of filePaths) {
+      const ok = await this.deleteImage(fp);
+      if (ok) deleted++;
+    }
+    this.logger.log(`过期图片清理完成: 删除 ${deleted}/${filePaths.length} 个文件`);
+    return deleted;
+  }
+
+  /**
+   * 从 MIME 类型推导文件扩展名
+   */
+  private _extFromMime(mimeType: string): string {
+    const map: Record<string, string> = {
+      'image/jpeg': '.jpg',
+      'image/jpg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp',
+      'image/heic': '.heic',
+      'image/heif': '.heif',
+    };
+    return map[mimeType] || '.jpg';
+  }
+}

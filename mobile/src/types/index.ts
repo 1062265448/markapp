@@ -126,6 +126,26 @@ export interface CompareSummary {
   overallMatch: boolean
 }
 
+export interface CompareResult {
+  success: boolean
+  data: {
+    id: string
+    compareResults: CompareResultItem[]
+    summary: CompareSummary
+    sprayCodeData: {
+      batchNo: string | null
+      packNo: string | null
+      productionDate: string | null
+      netWeight: number | null
+      grossWeight: number | null
+      pieces: number | null
+      _aiMeta?: { ocrEngine: string; ocrLineCount: number; ocrLatency: number }
+    }
+  }
+  message: string
+  timestamp: string
+}
+
 export interface SpraycodeResult {
   success: boolean
   data: {
@@ -141,11 +161,63 @@ export interface SpraycodeResult {
   timestamp: string
 }
 
+// 服务端历史记录列表项
+export interface HistoryListItem {
+  id: string
+  batchNo: string | null
+  packNo: string | null
+  productionDate: string | null
+  overallMatch: boolean | null
+  matchedCount: number | null
+  totalFields: number | null
+  spraycodeImageUrl: string | null
+  labelImageUrl: string | null
+  createdAt: string
+}
+
+export interface HistoryListResponse {
+  success: boolean
+  data: {
+    items: HistoryListItem[]
+    total: number
+    page: number
+    limit: number
+    totalPages: number
+  }
+  message: string
+  timestamp: string
+}
+
+export interface RecordDetailResponse {
+  success: boolean
+  data: {
+    id: string
+    compareResults: CompareResultItem[]
+    summary: CompareSummary
+    sprayCodeData: any
+    labelCodeData: any | null
+    message: string
+    images: Array<{
+      imageType: 'spraycode' | 'label'
+      url: string
+      mimeType: string
+      fileSize: number
+      exists: boolean
+    }>
+    createdAt: string
+  }
+  message: string
+  timestamp: string
+}
+
 export interface HistoryRecord {
   id: string
   type: 'recognize' | 'spraycode' | 'compare'
   timestamp: string
   thumbnail?: string
   summary: string
-  result: RecognitionResult | SpraycodeResult
+  overallMatch?: boolean | null
+  matchedCount?: number | null
+  totalFields?: number | null
+  result?: RecognitionResult | SpraycodeResult | CompareResult
 }

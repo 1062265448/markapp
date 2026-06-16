@@ -82,14 +82,19 @@ def _run_ocr(image: Image.Image) -> dict:
     """执行 RapidOCR 文本识别"""
     import numpy as np
     img_array = np.array(image)
+    print(f"[DEBUG] _run_ocr: image shape={img_array.shape}, dtype={img_array.dtype}")
 
     start = time.perf_counter()
-    ocr_result, _ = ocr(img_array)
+    try:
+        ocr_result, _ = ocr(img_array)
+    except Exception as e:
+        print(f"[ERROR] RapidOCR failed: {e}")
+        raise
     latency = time.perf_counter() - start
 
     if ocr_result:
         lines = [
-            {"text": item[1], "confidence": round(item[2], 4)}
+            {"text": item[1], "confidence": round(float(item[2]), 4)}
             for item in ocr_result
         ]
     else:
@@ -109,12 +114,13 @@ def _scan_barcodes(image: Image.Image) -> dict:
     latency = time.perf_counter() - start
 
     barcodes = []
-    for barcode in results:
-        format_name = BARCODE_FORMAT_NAMES.get(barcode.format, str(barcode.format))
-        barcodes.append({
-            "text": barcode.text,
-            "format": format_name,
-        })
+    if results:
+        for barcode in results:
+            format_name = BARCODE_FORMAT_NAMES.get(barcode.format, str(barcode.format))
+            barcodes.append({
+                "text": barcode.text,
+                "format": format_name,
+            })
 
     return {
         "barcodes": barcodes,

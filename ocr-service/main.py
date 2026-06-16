@@ -115,12 +115,11 @@ def _scan_barcodes(image: Image.Image) -> dict:
 
     barcodes = []
     if results:
-        for barcode in results:
-            format_name = BARCODE_FORMAT_NAMES.get(barcode.format, str(barcode.format))
-            barcodes.append({
-                "text": barcode.text,
-                "format": format_name,
-            })
+        format_name = BARCODE_FORMAT_NAMES.get(results.format, str(results.format))
+        barcodes.append({
+            "text": results.text,
+            "format": format_name,
+        })
 
     return {
         "barcodes": barcodes,

@@ -57,7 +57,7 @@ export class RuleCheckerService {
 
     const match = batchNo.match(/^\d{2}-+(\d{1})-+\d{3}J?$/);
     if (match) {
-      const ws = parseInt(match[1]);
+      const ws = parseInt(match[1], 10);
       if (ws < 1 || ws > 7) {
         return { field: 'batchNo', ruleType: 'range', passed: false, severity: 'error', original: batchNo, message: `车间代码 ${ws} 不在有效范围(1-7)内（提示：1和7容易混淆，请确认是否为误识别）` };
       }
@@ -65,7 +65,7 @@ export class RuleCheckerService {
 
     const yearMatch = batchNo.match(/^(\d{2})-+\d{1}-+\d{3}J?$/);
     if (yearMatch) {
-      const yearShort = parseInt(yearMatch[1]);
+      const yearShort = parseInt(yearMatch[1], 10);
       if (yearShort < 20 || yearShort > 30) {
         return { field: 'batchNo', ruleType: 'range', passed: false, severity: 'warning', original: batchNo, message: `年份 ${yearShort} 不在预期范围(20-30)内` };
       }
@@ -84,7 +84,7 @@ export class RuleCheckerService {
       return { field: 'packNo', ruleType: 'format', passed: false, severity: 'error', original: packNo, message: '包号格式应为正整数或正整数+J后缀' };
     }
 
-    const num = parseInt(packNo.replace(/J/, ''));
+    const num = parseInt(packNo.replace(/J/, ''), 10);
     if (num < 1 || num > 9999) {
       return { field: 'packNo', ruleType: 'range', passed: false, severity: 'error', original: packNo, message: `包号数值 ${num} 超出有效范围(1-9999)` };
     }
@@ -364,7 +364,7 @@ export class RuleCheckerService {
     if (!match) {
       return { field: 'batchNo', ruleType: 'crossField', passed: false, severity: 'error', original: batchNo, message: '批号格式无效，无法与条形码比较' };
     }
-    const wsFromBatch = parseInt(match[2]);
+    const wsFromBatch = parseInt(match[2], 10);
     const suffixFromBatch = match[3];
     const wsMatch = wsFromBatch === barcode.workshopCode;
     const suffixMatch = suffixFromBatch === barcode.batchNoSuffix;
@@ -413,7 +413,7 @@ export class RuleCheckerService {
     if (netWeight === null) {
       return { field: 'netWeight', ruleType: 'crossField', passed: false, severity: 'error', original: null, message: '净重未识别' };
     }
-    const encodedWeight = parseInt(barcode.netWeightEncoded);
+    const encodedWeight = parseInt(barcode.netWeightEncoded, 10);
     const expectedWeight = encodedWeight / 10;
 
     if (Math.abs(netWeight - expectedWeight) > 0.1) {
@@ -425,7 +425,7 @@ export class RuleCheckerService {
   extractWorkshopCodeFromBatchNo(batchNo: string | null): number | null {
     if (!batchNo) return null;
     const match = batchNo.match(/^\d{2}-+(\d{1})-+\d{3}J?$/);
-    return match ? parseInt(match[1]) : null;
+    return match ? parseInt(match[1], 10) : null;
   }
 
   checkWorkshopProductConsistency(workshopCode: number, productName: string | null, batchNo: string | null): CheckResult {
@@ -503,7 +503,7 @@ export class RuleCheckerService {
 
     if (typeof corrected.pieces === 'string') {
       const before = corrected.pieces;
-      corrected.pieces = parseInt(corrected.pieces.replace(/[Ss]/g, '5'));
+      corrected.pieces = parseInt(corrected.pieces.replace(/[Ss]/g, '5'), 10);
       if (before !== String(corrected.pieces)) {
         corrections.push({ field: 'pieces', original: before, corrected: String(corrected.pieces), rule: 'charConfusion' });
       }
@@ -513,12 +513,12 @@ export class RuleCheckerService {
     if (corrected.batchNo && correctedBarcode) {
       const batchMatch = corrected.batchNo.match(/^\d{2}-+(\d{1})-+\d{3}J?$/);
       if (batchMatch) {
-        const workshopFromBatch = parseInt(batchMatch[1]);
+        const workshopFromBatch = parseInt(batchMatch[1], 10);
         const barcodeParts = correctedBarcode.trim().split(/\s+/);
         if (barcodeParts.length === 6) {
           const productCode = barcodeParts[4];
           if (productCode && productCode.length === 7) {
-            const wsFromBarcode = parseInt(productCode[0]);
+            const wsFromBarcode = parseInt(productCode[0], 10);
             if (wsFromBarcode !== workshopFromBatch && workshopFromBatch >= 1 && workshopFromBatch <= 7) {
               const correctedProductCode = String(workshopFromBatch) + productCode.slice(1);
               correctedBarcode = [
@@ -536,7 +536,7 @@ export class RuleCheckerService {
     if (corrected.productName && corrected.batchNo) {
       const batchMatch = corrected.batchNo.match(/^\d{2}-+(\d{1})-+\d{3}J?$/);
       if (batchMatch) {
-        const workshopFromBatch = parseInt(batchMatch[1]);
+        const workshopFromBatch = parseInt(batchMatch[1], 10);
 
         // 从条形码提取车间代码（可选，有则加入交叉验证）
         let workshopFromBarcode: number | null = null;
@@ -545,7 +545,7 @@ export class RuleCheckerService {
           if (barcodeParts.length === 6) {
             const productCode = barcodeParts[4];
             if (productCode && productCode.length === 7) {
-              const bc = parseInt(productCode[0]);
+              const bc = parseInt(productCode[0], 10);
               if (bc >= 1 && bc <= 7) {
                 workshopFromBarcode = bc;
               }

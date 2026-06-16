@@ -9,6 +9,10 @@ export class NickelConfigService {
     return this.configService.get<string>('QWEN_API_KEY', '');
   }
 
+  get apiKey(): string {
+    return this.configService.get<string>('API_KEY', '');
+  }
+
   get qwenBaseUrl(): string {
     return (
       this.configService.get<string>('QWEN_BASE_URL') ||
@@ -62,7 +66,15 @@ export class NickelConfigService {
   }
 
   get nodeEnv(): string {
-    return this.configService.get<string>('NODE_ENV', 'development');
+    return this.configService.get<string>('NODE_ENV', 'production');
+  }
+
+  get apiKeyEnabled(): boolean {
+    return this.configService.get<string>('API_KEY_ENABLED', 'true') === 'true';
+  }
+
+  get corsOrigin(): string {
+    return this.configService.get<string>('CORS_ORIGIN', '');
   }
 
   get rateLimitWindow(): number {

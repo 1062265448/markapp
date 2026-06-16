@@ -10,6 +10,9 @@ dist/
 .env.*
 !.env.example
 
+# Uploads
+uploads/
+
 # IDE
 .idea/
 .vscode/
@@ -28,3 +31,6 @@ coverage/
 mobile/android/app/build/
 mobile/android/.gradle/
 .claude/
+
+# TypeScript build info
+*.tsbuildinfo

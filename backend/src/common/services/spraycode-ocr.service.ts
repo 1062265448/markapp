@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { NickelConfigService } from '../../config/config.service';
-import { NickelPromptService } from './nickel-prompt.service';
-import { parseWithFallback } from './json-parser.service';
+import { OcrMeta } from '../../nickel/types/nickel.types';
 import axios from 'axios';
 
 interface SpraycodeFields {
@@ -11,76 +10,87 @@ interface SpraycodeFields {
   netWeight: number | null;
   grossWeight: number | null;
   pieces: number | null;
-  _aiMeta?: {
-    ocrEngine: string;
-    ocrLineCount: number;
-    ocrLatency: number;
-  };
+  _ocrMeta?: OcrMeta;
+}
+
+// OCR /ocr/full 端点返回的单张图片结果
+interface OcrFullResult {
+  lines: Array<{ text: string; confidence: number }>;
+  lineCount: number;
+  ocrLatencyMs: number;
+  barcodes: Array<{ text: string; format: string }>;
+  barcodeCount: number;
+  barcodeLatencyMs: number;
 }
 
 @Injectable()
 export class SpraycodeOcrService {
   private rapidOcrUrl: string;
 
-  constructor(
-    private config: NickelConfigService,
-    private promptService: NickelPromptService,
-  ) {
+  constructor(private config: NickelConfigService) {
     this.rapidOcrUrl = this.config.rapidOcrUrl;
   }
 
   /**
-   * 识别喷码图片 - 调用RapidOCR
+   * 识别喷码图片 - 调用本地 OCR 服务（RapidOCR + 条码扫描）
    */
   async recognizeSpraycode(imageBuffer: Buffer): Promise<SpraycodeFields> {
     const start = Date.now();
     console.log('[SpraycodeOCR] 开始喷码识别');
 
     let lines: Array<{ text: string; confidence: number }> = [];
+    let barcodes: Array<{ text: string; format: string }> = [];
     let engine = 'none';
+    let ocrLatencyMs = 0;
+    let barcodeLatencyMs = 0;
+    let barcodeCount = 0;
 
-    // 主引擎: RapidOCR (服务器本地)
+    // 主引擎: 调用 OCR /ocr/full 端点（文本 + 条码）
     try {
-      console.log('[SpraycodeOCR] 调用RapidOCR:', this.rapidOcrUrl + '/ocr/text');
+      console.log('[SpraycodeOCR] 调用OCR服务:', this.rapidOcrUrl + '/ocr/full');
       const base64 = imageBuffer.toString('base64');
       const response = await axios.post(
-        this.rapidOcrUrl + '/ocr/text',
+        this.rapidOcrUrl + '/ocr/full',
         { images: [`data:image/jpeg;base64,${base64}`] },
-        { timeout: 10000 },
+        { timeout: 15000 },
       );
 
       const ocrResult = response.data;
-      if (ocrResult?.data?.length > 0) {
-        lines = ocrResult.data.map((item: any) => ({
-          text: typeof item === 'string' ? item : (item.text || ''),
-          confidence: 1.0,
-        }));
-        engine = 'rapid-ocr';
-        console.log('[SpraycodeOCR] RapidOCR成功，识别', lines.length, '行');
+      if (ocrResult?.success && ocrResult?.data?.length > 0) {
+        const item: OcrFullResult = ocrResult.data[0];
+        lines = item.lines || [];
+        barcodes = item.barcodes || [];
+        ocrLatencyMs = item.ocrLatencyMs || 0;
+        barcodeLatencyMs = item.barcodeLatencyMs || 0;
+        barcodeCount = item.barcodeCount || 0;
+        engine = 'rapid-ocr + zxing-cpp';
+        console.log('[SpraycodeOCR] OCR成功，识别', lines.length, '行，条码', barcodeCount);
       }
     } catch (e) {
-      console.warn('[SpraycodeOCR] RapidOCR调用失败:', (e as Error).message);
+      console.warn('[SpraycodeOCR] OCR /ocr/full 调用失败:', (e as Error).message);
     }
 
-    // 降级: 用Qwen VL识别喷码
+    // 降级: 尝试 /ocr/text（仅文本，无条码）
     if (lines.length === 0) {
       try {
-        console.log('[SpraycodeOCR] 降级到Qwen VL...');
-        const qwenResult = await this._callQwenForSpraycode(imageBuffer);
-        if (qwenResult) {
-          const fields: any = {};
-          for (const key of ['batchNo', 'packNo', 'productionDate', 'netWeight', 'grossWeight', 'pieces']) {
-            if (qwenResult[key] !== null && qwenResult[key] !== undefined) {
-              fields[key] = qwenResult[key];
-            }
-          }
-          fields._aiMeta = { ocrEngine: 'qwen-vl', ocrLineCount: 0, ocrLatency: Date.now() - start };
-          const latency = Date.now() - start;
-          console.log('[SpraycodeOCR] Qwen VL降级成功，耗时:', latency, 'ms');
-          return fields as SpraycodeFields;
+        console.log('[SpraycodeOCR] 降级到 /ocr/text...');
+        const base64 = imageBuffer.toString('base64');
+        const response = await axios.post(
+          this.rapidOcrUrl + '/ocr/text',
+          { images: [`data:image/jpeg;base64,${base64}`] },
+          { timeout: 10000 },
+        );
+
+        const ocrResult = response.data;
+        if (ocrResult?.success && ocrResult?.data?.length > 0) {
+          const item = ocrResult.data[0];
+          lines = item.lines || [];
+          ocrLatencyMs = item.latencyMs || 0;
+          engine = 'rapid-ocr';
+          console.log('[SpraycodeOCR] /ocr/text 降级成功，识别', lines.length, '行');
         }
       } catch (e) {
-        console.warn('[SpraycodeOCR] Qwen VL降级也失败:', (e as Error).message);
+        console.warn('[SpraycodeOCR] /ocr/text 降级也失败:', (e as Error).message);
       }
     }
 
@@ -91,10 +101,28 @@ export class SpraycodeOcrService {
     const fields = this._extractFields(lines);
     const latency = Date.now() - start;
 
-    fields._aiMeta = {
-      ocrEngine: engine,
-      ocrLineCount: lines.length,
-      ocrLatency: latency,
+    // 如果有条码扫描结果且 OCR 文本未提取到批号/包号，从条码补充
+    if (barcodes.length > 0) {
+      const bestBarcode = this._pickBestBarcode(barcodes);
+      if (bestBarcode) {
+        const parsed = this._tryParseBarcode(bestBarcode);
+        if (parsed) {
+          // 条码结果作为补充（OCR 文本提取优先）
+          if (!fields.batchNo && parsed.batchNo) fields.batchNo = parsed.batchNo;
+          if (!fields.packNo && parsed.packNo) fields.packNo = parsed.packNo;
+          if (!fields.productionDate && parsed.productionDate) fields.productionDate = parsed.productionDate;
+          if (!fields.netWeight && parsed.netWeight !== null) fields.netWeight = parsed.netWeight;
+        }
+      }
+    }
+
+    fields._ocrMeta = {
+      engine,
+      ocrLatency: ocrLatencyMs,
+      barcodeLatency: barcodeLatencyMs,
+      lineCount: lines.length,
+      barcodeCount,
+      barcodeFormat: barcodes.length > 0 ? barcodes[0].format : null,
     };
 
     console.log('[SpraycodeOCR] 字段提取完成，耗时:', latency, 'ms');
@@ -102,45 +130,64 @@ export class SpraycodeOcrService {
   }
 
   /**
-   * 用Qwen VL识别喷码
+   * 从条码扫描结果中选择最佳条码
    */
-  private async _callQwenForSpraycode(imageBuffer: Buffer): Promise<any> {
-    const apiKey = this.config.qwenApiKey;
-    if (!apiKey) return null;
+  private _pickBestBarcode(barcodes: Array<{ text: string; format: string }>): string | null {
+    if (barcodes.length === 0) return null;
 
-    const base64Image = imageBuffer.toString('base64');
-    const prompt = this.promptService.buildSpraycodePrompt();
+    // 优先选择包含 6 段或 25 位数字的条码
+    const digitPattern = /^[\d\s]{20,}$/;
+    const best = barcodes.find(b => digitPattern.test(b.text));
+    if (best) return best.text.trim();
 
-    const apiUrl = this.config.qwenBaseUrl.endsWith('/chat/completions')
-      ? this.config.qwenBaseUrl
-      : this.config.qwenBaseUrl + '/chat/completions';
+    // 其次选择最长的条码
+    const sorted = [...barcodes].sort((a, b) => b.text.length - a.text.length);
+    return sorted[0].text.trim();
+  }
 
-    const response = await axios.post(
-      apiUrl,
-      {
-        model: 'qwen-vl-ocr',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } },
-              { type: 'text', text: prompt },
-            ],
-          },
-        ],
-      },
-      {
-        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        timeout: 10000,
-      },
-    );
+  /**
+   * 尝试解析条码字符串为喷码字段
+   */
+  private _tryParseBarcode(barcode: string): { batchNo: string | null; packNo: string | null; productionDate: string | null; netWeight: number | null } | null {
+    const trimmed = barcode.trim();
+    let parts: string[];
 
-    const content = response.data.choices?.[0]?.message?.content || '';
-    try {
-      return parseWithFallback(content);
-    } catch {
+    if (trimmed.includes(' ')) {
+      parts = trimmed.split(/\s+/);
+    } else if (/^\d{25}$/.test(trimmed)) {
+      parts = [
+        trimmed.slice(0, 3),
+        trimmed.slice(3, 5),
+        trimmed.slice(5, 7),
+        trimmed.slice(7, 13),
+        trimmed.slice(13, 20),
+        trimmed.slice(20, 25),
+      ];
+    } else {
       return null;
     }
+
+    if (parts.length !== 6) return null;
+
+    const productCode = parts[4];
+    if (productCode.length !== 7) return null;
+
+    const workshopCode = parseInt(productCode[0], 10);
+    const batchNoSuffix = productCode.slice(1, 4);
+    const packCode = parseInt(productCode.slice(4), 10);
+    const weightCode = parseInt(parts[5], 10);
+
+    // 从日期代码提取日期
+    const dateCode = parts[3];
+    if (dateCode.length !== 6) return null;
+    const productionDate = `20${dateCode.slice(0, 2)}-${dateCode.slice(2, 4)}-${dateCode.slice(4, 6)}`;
+
+    return {
+      batchNo: `${dateCode.slice(0, 2)}-${workshopCode}-${batchNoSuffix}`,
+      packNo: packCode.toString(),
+      productionDate,
+      netWeight: weightCode / 10,
+    };
   }
 
   /**

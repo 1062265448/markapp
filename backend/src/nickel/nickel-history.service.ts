@@ -206,13 +206,13 @@ export class NickelHistoryService {
       sprayCodeData: record.sprayCodeData,
       labelCodeData: record.labelCodeData,
       message: record.message,
-      images: images.map((img) => ({
+      images: await Promise.all(images.map(async (img) => ({
         imageType: img.imageType,
         url: `/api/nickel/images/${id}/${img.imageType}`,
         mimeType: img.mimeType,
         fileSize: img.fileSize,
-        exists: this.imageStorage.imageExists(img.filePath),
-      })),
+        exists: await this.imageStorage.imageExists(img.filePath),
+      }))),
       createdAt: record.createdAt.toISOString(),
     };
   }
@@ -230,7 +230,7 @@ export class NickelHistoryService {
     }
 
     const absolutePath = this.imageStorage.getAbsolutePath(image.filePath);
-    if (!this.imageStorage.imageExists(image.filePath)) {
+    if (!(await this.imageStorage.imageExists(image.filePath))) {
       throw new NotFoundException('图片文件已过期或被清理');
     }
 
@@ -267,30 +267,34 @@ export class NickelHistoryService {
    */
   @Cron('30 2 * * *')
   async cleanupExpiredImages() {
-    const retentionDays = this.config.imageRetentionDays;
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - retentionDays);
+    try {
+      const retentionDays = this.config.imageRetentionDays;
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - retentionDays);
 
-    this.logger.log(`开始清理 ${retentionDays} 天前的过期图片 (截止: ${cutoff.toISOString()})`);
+      this.logger.log(`开始清理 ${retentionDays} 天前的过期图片 (截止: ${cutoff.toISOString()})`);
 
-    const expiredImages = await this.imageRepo.find({
-      where: { createdAt: LessThan(cutoff) },
-    });
+      const expiredImages = await this.imageRepo.find({
+        where: { createdAt: LessThan(cutoff) },
+      });
 
-    if (expiredImages.length === 0) {
-      this.logger.log('无过期图片需要清理');
-      return;
+      if (expiredImages.length === 0) {
+        this.logger.log('无过期图片需要清理');
+        return;
+      }
+
+      // 删除磁盘文件
+      const filePaths = expiredImages.map((img) => img.filePath);
+      const deleted = await this.imageStorage.cleanupExpiredImages(filePaths);
+
+      // 删除数据库中的图片记录（不删除 compare_record）
+      await this.imageRepo.remove(expiredImages);
+
+      this.logger.log(
+        `过期图片清理完成: 文件删除 ${deleted}/${expiredImages.length}, DB记录删除 ${expiredImages.length}`,
+      );
+    } catch (error) {
+      this.logger.error(`过期图片清理失败: ${(error as Error).message}`, (error as Error).stack);
     }
-
-    // 删除磁盘文件
-    const filePaths = expiredImages.map((img) => img.filePath);
-    const deleted = await this.imageStorage.cleanupExpiredImages(filePaths);
-
-    // 删除数据库中的图片记录（不删除 compare_record）
-    await this.imageRepo.remove(expiredImages);
-
-    this.logger.log(
-      `过期图片清理完成: 文件删除 ${deleted}/${expiredImages.length}, DB记录删除 ${expiredImages.length}`,
-    );
   }
 }

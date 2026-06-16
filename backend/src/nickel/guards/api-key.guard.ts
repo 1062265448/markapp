@@ -1,6 +1,5 @@
 import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { ConfigService } from '@nestjs/config';
+import { NickelConfigService } from '../../config/config.service';
 import { timingSafeEqual } from 'crypto';
 
 function safeCompare(a: string, b: string): boolean {
@@ -10,14 +9,12 @@ function safeCompare(a: string, b: string): boolean {
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: NickelConfigService) {}
 
   canActivate(
     context: ExecutionContext,
-  ): boolean | Promise<boolean> | Observable<boolean> {
-    const apiKeyEnabled = this.configService.get<string>('API_KEY_ENABLED', 'false');
-
-    if (apiKeyEnabled !== 'true') {
+  ): boolean | Promise<boolean> {
+    if (!this.configService.apiKeyEnabled) {
       return true;
     }
 
@@ -28,7 +25,7 @@ export class ApiKeyGuard implements CanActivate {
       throw new UnauthorizedException('缺少API密钥');
     }
 
-    const validApiKey = this.configService.get<string>('API_KEY');
+    const validApiKey = this.configService.apiKey;
     if (!validApiKey) {
       throw new UnauthorizedException('服务端未配置API密钥');
     }

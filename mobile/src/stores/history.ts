@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { HistoryRecord, HistoryListItem, RecognitionResult, SpraycodeResult, CompareResult } from '@/types'
+import type { HistoryRecord, HistoryListItem, RecognitionResult, SpraycodeResult, CompareResult, CompareSummary } from '@/types'
 import { fetchHistory, deleteHistoryRecord } from '@/api/nickel'
 
 export const useHistoryStore = defineStore('history', () => {
@@ -23,7 +23,7 @@ export const useHistoryStore = defineStore('history', () => {
         const items: HistoryListItem[] = res.data.items
         records.value = items.map((item) => ({
           id: item.id,
-          type: 'compare',
+          type: 'compare' as const,
           timestamp: item.createdAt,
           thumbnail: item.spraycodeImageUrl || undefined,
           summary: item.overallMatch ? '对比一致' : '对比不一致',
@@ -34,8 +34,8 @@ export const useHistoryStore = defineStore('history', () => {
         total.value = res.data.total
         totalPages.value = res.data.totalPages
       }
-    } catch (e) {
-      console.warn('[History] 加载历史记录失败:', e)
+    } catch (e: unknown) {
+      console.warn('[History] 加载历史记录失败:', e instanceof Error ? e.message : e)
     } finally {
       loading.value = false
     }
@@ -64,8 +64,8 @@ export const useHistoryStore = defineStore('history', () => {
           total.value = res.data.total
           totalPages.value = res.data.totalPages
         }
-      } catch (e) {
-        console.warn('[History] 加载更多失败:', e)
+      } catch (e: unknown) {
+        console.warn('[History] 加载更多失败:', e instanceof Error ? e.message : e)
       } finally {
         loading.value = false
       }
@@ -102,17 +102,17 @@ export const useHistoryStore = defineStore('history', () => {
 
   // 添加对比记录（使用服务端返回的 id）
   function addCompare(result: CompareResult, thumbnail?: string) {
-    const summary = result.data.summary?.overallMatch ? '对比一致' : '对比不一致'
-
+    const summary = result.data.summary
+    const isMatch = summary.matched === summary.totalFields
     records.value.unshift({
       id: result.data.id,
       type: 'compare',
       timestamp: result.timestamp,
       thumbnail,
-      summary,
-      overallMatch: result.data.summary?.overallMatch,
-      matchedCount: result.data.summary?.matched,
-      totalFields: result.data.summary?.total,
+      summary: isMatch ? '对比一致' : '对比不一致',
+      overallMatch: isMatch,
+      matchedCount: summary.matched,
+      totalFields: summary.totalFields,
       result,
     })
   }
@@ -123,8 +123,8 @@ export const useHistoryStore = defineStore('history', () => {
       await deleteHistoryRecord(id)
       records.value = records.value.filter(r => r.id !== id)
       total.value = Math.max(0, total.value - 1)
-    } catch (e) {
-      console.warn('[History] 删除记录失败:', e)
+    } catch (e: unknown) {
+      console.warn('[History] 删除记录失败:', e instanceof Error ? e.message : e)
       // 即使服务端失败，也尝试本地移除
       records.value = records.value.filter(r => r.id !== id)
     }
@@ -145,12 +145,16 @@ export const useHistoryStore = defineStore('history', () => {
 
   const recent = computed(() => records.value.slice(0, 20))
   const hasMore = computed(() => page.value < totalPages.value)
+  const currentRecord = computed(() => {
+    if (records.value.length === 0) return null
+    return records.value[0]
+  })
 
   // 初始化加载
   load()
 
   return {
-    records, recent, loading, total, page, totalPages, hasMore,
+    records, recent, loading, total, page, totalPages, hasMore, currentRecord,
     addRecognize, addSpraycode, addCompare, remove, clear, load, loadMore,
   }
 })

@@ -3,45 +3,22 @@ import {
   RecognitionResult,
   RecognitionData,
   NickelLabelData,
-  AIMeta,
-  MergeStats,
+  OcrMeta,
 } from './types/nickel.types';
+import { WORKSHOP_MAP } from './types/nickel.types';
 import { ImagePreprocessService } from '../common/services/image-preprocess.service';
-import { QwenAIService } from '../common/services/qwen-ai.service';
-import { VolcAIService } from '../common/services/volc-ai.service';
-import { GlmAIService } from '../common/services/glm-ai.service';
+import { LabelOcrService } from '../common/services/label-ocr.service';
 import { RuleCheckerService } from '../common/services/rule-checker.service';
 import { BarcodeParserService } from '../common/services/barcode-parser.service';
 import { ConfidenceService } from '../common/services/confidence.service';
 import { SpraycodeOcrService } from '../common/services/spraycode-ocr.service';
 import { SpraycodeCompareService } from '../common/services/spraycode-compare.service';
 
-// Model outcome interfaces for better type narrowing
-interface ModelSuccess {
-  success: true;
-  result: any;
-  latency: number;
-}
-interface ModelFailure {
-  success: false;
-  error: string;
-  skipped?: boolean;
-}
-type ModelOutcome = ModelSuccess | ModelFailure;
-
-interface SuccessEntry {
-  model: string;
-  result: any;
-  latency: number;
-}
-
 @Injectable()
 export class NickelService {
   constructor(
     private readonly imagePreprocessService: ImagePreprocessService,
-    private readonly qwenAIService: QwenAIService,
-    private readonly volcAIService: VolcAIService,
-    private readonly glmAIService: GlmAIService,
+    private readonly labelOcrService: LabelOcrService,
     private readonly ruleCheckerService: RuleCheckerService,
     private readonly barcodeParserService: BarcodeParserService,
     private readonly confidenceService: ConfidenceService,
@@ -50,25 +27,19 @@ export class NickelService {
   ) {}
 
   /**
-   * 识别镍板标签图片（三模型并行投票）
+   * 识别镍板标签图片（本地OCR + 条码扫描）
    */
   async recognize(
     file: { buffer: Buffer; mimetype: string; size: number },
     barcode?: string,
-    enableGLM: boolean = true,
   ): Promise<RecognitionResult> {
-    const aiMeta: AIMeta = {
-      model: 'doubao-vision-pro',
-      retry: false,
-      secondaryModel: null,
-      tertiaryModel: null,
-      secondaryError: null,
-      tertiaryError: null,
-      tertiarySkipped: false,
-      primaryLatency: 0,
-      volcLatency: 0,
-      glmLatency: 0,
-      qwenLatency: 0,
+    const ocrMeta: OcrMeta = {
+      engine: 'rapid-ocr + zxing-cpp',
+      ocrLatency: 0,
+      barcodeLatency: 0,
+      lineCount: 0,
+      barcodeCount: 0,
+      barcodeFormat: null,
     };
 
     try {
@@ -87,122 +58,37 @@ export class NickelService {
       // 1. 图像预处理
       const originalImage = await this.imagePreprocessService.preprocess(file.buffer);
 
-      // 2. 并行调用三模型
-      const volcStart = Date.now();
-      const volcPromise: Promise<ModelOutcome> = this.volcAIService.recognizeNickelLabel(originalImage)
-        .then(r => ({ success: true as const, result: r, latency: Date.now() - volcStart }))
-        .catch(e => ({ success: false as const, error: (e as Error).message }));
+      // 2. OCR + 条码扫描识别标签
+      const { labelData: rawResult, _ocrMeta } = await this.labelOcrService.recognizeLabel(originalImage, barcode);
+      Object.assign(ocrMeta, _ocrMeta);
 
-      const qwenStart = Date.now();
-      const qwenPromise: Promise<ModelOutcome> = this.qwenAIService.recognizeNickelLabel(originalImage)
-        .then(r => ({ success: true as const, result: r, latency: Date.now() - qwenStart }))
-        .catch(e => ({ success: false as const, error: (e as Error).message }));
-
-      let glmPromise: Promise<ModelOutcome>;
-      if (enableGLM) {
-        const glmStart = Date.now();
-        glmPromise = this.glmAIService.recognizeNickelLabel(originalImage)
-          .then(r => ({ success: true as const, result: r, latency: Date.now() - glmStart }))
-          .catch(e => ({ success: false as const, error: (e as Error).message }));
-      } else {
-        glmPromise = Promise.resolve({ success: false as const, error: 'GLM已关闭(用户设置)', skipped: true });
-        aiMeta.tertiarySkipped = true;
+      // OCR 识别结果为空时抛出错误
+      const hasAnyField = Object.entries(rawResult).some(
+        ([key, val]) => !key.startsWith('_') && val !== null && val !== undefined && val !== '',
+      );
+      if (!hasAnyField) {
+        throw new BadRequestException('识别失败: OCR未识别到任何标签字段');
       }
 
-      const [volcOutcome, qwenOutcome, glmOutcome] = await Promise.all([volcPromise, qwenPromise, glmPromise]);
+      // 3. 确定条形码
+      const finalBarcode = barcode || rawResult.barcode || undefined;
 
-      // Helper to safely get values from outcomes
-      const getSuccessResult = (o: ModelOutcome): any | null => o.success ? (o as ModelSuccess).result : null;
-      const getSuccessLatency = (o: ModelOutcome): number => o.success ? (o as ModelSuccess).latency : 0;
-      const getError = (o: ModelOutcome): string | null => !o.success ? (o as ModelFailure).error : null;
-      const isSkipped = (o: ModelOutcome): boolean => !o.success && (o as ModelFailure).skipped === true;
-
-      // 3. 记录元数据
-      aiMeta.volcLatency = getSuccessLatency(volcOutcome);
-      aiMeta.qwenLatency = getSuccessLatency(qwenOutcome);
-      aiMeta.glmLatency = getSuccessLatency(glmOutcome);
-
-      if (qwenOutcome.success) aiMeta.secondaryModel = { model: 'qwen-vl-ocr', latency: getSuccessLatency(qwenOutcome) };
-      else aiMeta.secondaryError = getError(qwenOutcome);
-
-      if (glmOutcome.success) aiMeta.tertiaryModel = { model: 'glm-4.6v-flash', latency: getSuccessLatency(glmOutcome) };
-      else if (isSkipped(glmOutcome)) aiMeta.tertiarySkipped = true;
-      else aiMeta.tertiaryError = getError(glmOutcome);
-
-      // 4. 投票合并
-      const successList: SuccessEntry[] = [];
-      const volcResult = getSuccessResult(volcOutcome);
-      if (volcResult) successList.push({ model: 'doubao', result: volcResult, latency: getSuccessLatency(volcOutcome) });
-
-      const qwenResult = getSuccessResult(qwenOutcome);
-      if (qwenResult) successList.push({ model: 'qwen', result: qwenResult, latency: getSuccessLatency(qwenOutcome) });
-
-      const glmResult = getSuccessResult(glmOutcome);
-      if (glmResult) successList.push({ model: 'glm-4.6v-flash', result: glmResult, latency: getSuccessLatency(glmOutcome) });
-
-      const successCount = successList.length;
-      if (successCount === 0) {
-        throw new BadRequestException('识别失败:三模型均无法识别');
-      }
-
-      const primaryModel = enableGLM ? 'glm-4.6v-flash' : 'doubao';
-      aiMeta.model = primaryModel;
-      if (primaryModel === 'glm-4.6v-flash' && glmOutcome.success) aiMeta.primaryLatency = getSuccessLatency(glmOutcome);
-      else if (volcOutcome.success) aiMeta.primaryLatency = getSuccessLatency(volcOutcome);
-
-      const mergeStats: MergeStats = { consistent: 0, volcFilled: 0, conflicts: 0, details: [] };
-      let rawResult: any;
-
-      if (successCount === 1) {
-        rawResult = { ...successList[0].result };
-        aiMeta.model = successList[0].model;
-        aiMeta.primaryLatency = successList[0].latency;
-      } else if (successCount === 2) {
-        const primaryEntry = successList.find(m => m.model === primaryModel) || successList[0];
-        const otherEntry = successList.find(m => m.model !== primaryEntry.model)!;
-        rawResult = { ...primaryEntry.result };
-        rawResult = this.mergeResults(rawResult, otherEntry.result, mergeStats);
-        aiMeta.model = primaryEntry.model + ' + ' + otherEntry.model;
-      } else {
-        if (enableGLM) {
-          rawResult = this.threeWayMerge(glmResult!, qwenResult!, volcResult!, mergeStats);
-          aiMeta.model = 'glm-4.6v-flash + qwen-vl-ocr + doubao-vision-pro';
-        } else {
-          rawResult = this.threeWayMerge(volcResult!, qwenResult!, glmResult!, mergeStats);
-          aiMeta.model = 'doubao-vision-pro + qwen-vl-ocr + glm-4.6v-flash';
-        }
-      }
-
-      // 保存原始结果
-      let primaryRawData: NickelLabelData | null = null;
-      let secondaryRawData: NickelLabelData | null = null;
-      let tertiaryRawData: NickelLabelData | null = null;
-
-      if (enableGLM) {
-        primaryRawData = glmResult as NickelLabelData | null;
-        secondaryRawData = qwenResult as NickelLabelData | null;
-        tertiaryRawData = volcResult as NickelLabelData | null;
-      } else {
-        primaryRawData = volcResult as NickelLabelData | null;
-        secondaryRawData = qwenResult as NickelLabelData | null;
-        tertiaryRawData = glmResult as NickelLabelData | null;
-      }
-
-      // 5. 确定条形码
-      const finalBarcode = barcode || rawResult.barcode;
-
-      // 6. 自动纠正
+      // 4. 自动纠正
       const { corrected, corrections, correctedBarcode } = this.ruleCheckerService.autoCorrect(rawResult, finalBarcode);
       const effectiveBarcode = correctedBarcode || finalBarcode;
 
-      // 7. 规则校验
-      const checkResults = this.ruleCheckerService.check(corrected, effectiveBarcode);
-
-      // 8. 条形码解析
+      // 5. 条码解析后补充 productName/brand
       let barcodeParsed: any = null;
       if (effectiveBarcode) {
         const parsed = this.barcodeParserService.parse(effectiveBarcode);
-        if (parsed) {
+        if (parsed && parsed.parsed) {
+          // 如果纠正后 productName 仍为空，从条码车间代码推导
+          if (!corrected.productName && parsed.workshopCode) {
+            const workshopName = WORKSHOP_MAP[parsed.workshopCode] || '';
+            const parts = workshopName.split('-');
+            corrected.productName = parts.length > 1 ? parts[parts.length - 1] : workshopName;
+          }
+
           const productionDateCode = parsed.productionDate
             ? parsed.productionDate.replace(/\D/g, '').slice(2)
             : '';
@@ -226,23 +112,28 @@ export class NickelService {
         }
       }
 
-      // 9. 统计
+      // 6. 硬编码默认值（OCR 未识别时补充）
+      if (!corrected.brand) corrected.brand = '金川';
+      if (!corrected.standard) corrected.standard = 'GB/T 6516-2025';
+      if (!corrected.address) corrected.address = '甘肃省金昌市金川区北京路10号';
+      if (!corrected.weightBy) corrected.weightBy = '按净重计价';
+
+      // 7. 规则校验
+      const checkResults = this.ruleCheckerService.check(corrected, effectiveBarcode || undefined);
+
+      // 8. 统计
       const errorCount = checkResults.filter(r => r.severity === 'error').length;
       const warningCount = checkResults.filter(r => r.severity === 'warning').length;
       const allPassed = checkResults.every(r => r.passed);
 
-      // 10. 置信度
+      // 9. 置信度
       const confidence = this.confidenceService.calculate(corrected, corrections, checkResults, barcodeParsed);
 
-      // 11. 返回结果
-      const modelCountStr = successCount === 3 ? '（三模型）' : (successCount >= 2 ? '（双模型）' : (aiMeta.tertiarySkipped ? '（单模型·GLM关闭）' : '（单模型）'));
-
+      // 10. 返回结果
       return {
         success: true,
         data: {
           rawData: rawResult,
-          secondaryRawData,
-          tertiaryRawData,
           correctedData: corrected,
           corrections,
           checkResults,
@@ -251,11 +142,10 @@ export class NickelService {
           errorCount,
           warningCount,
           confidence,
-          mergeStats,
-          _aiMeta: aiMeta,
+          _ocrMeta: ocrMeta,
         },
         message: allPassed
-          ? `识别成功，所有字段校验通过${modelCountStr}`
+          ? '识别成功，所有字段校验通过'
           : `识别完成，发现 ${errorCount} 个错误和 ${warningCount} 个警告`,
         timestamp: new Date().toISOString(),
       };
@@ -266,8 +156,6 @@ export class NickelService {
         success: false,
         data: {
           rawData: null,
-          secondaryRawData: null,
-          tertiaryRawData: null,
           correctedData: null,
           corrections: [],
           checkResults: [],
@@ -276,8 +164,7 @@ export class NickelService {
           errorCount: 1,
           warningCount: 0,
           confidence: null,
-          mergeStats: null,
-          _aiMeta: aiMeta,
+          _ocrMeta: ocrMeta,
         },
         message: `识别失败: ${(error as Error).message}`,
         timestamp: new Date().toISOString(),
@@ -290,8 +177,14 @@ export class NickelService {
    */
   async recognizeSpraycode(file: { buffer: Buffer; mimetype: string; size: number }): Promise<any> {
     if (!file) throw new BadRequestException('请上传图片文件');
+    if (!file.buffer || !file.mimetype || file.size === undefined) {
+      throw new BadRequestException('无效的文件上传格式');
+    }
     if (!this.imagePreprocessService.validateImageFormat(file.mimetype)) {
       throw new BadRequestException(`不支持的文件类型: ${file.mimetype}`);
+    }
+    if (!this.imagePreprocessService.validateImageSize(file.size, 10)) {
+      throw new BadRequestException('文件大小不能超过 10MB');
     }
 
     const spraycodeResult = await this.spraycodeOcrService.recognizeSpraycode(file.buffer);
@@ -312,6 +205,30 @@ export class NickelService {
     labelFile?: { buffer: Buffer; mimetype: string; size: number },
     labelResult?: any,
   ): Promise<any> {
+    // 校验喷码图片
+    if (!sprayFile) throw new BadRequestException('请上传喷码图片');
+    if (!sprayFile.buffer || !sprayFile.mimetype || sprayFile.size === undefined) {
+      throw new BadRequestException('无效的喷码图片上传格式');
+    }
+    if (!this.imagePreprocessService.validateImageFormat(sprayFile.mimetype)) {
+      throw new BadRequestException(`不支持的喷码图片类型: ${sprayFile.mimetype}`);
+    }
+    if (!this.imagePreprocessService.validateImageSize(sprayFile.size, 10)) {
+      throw new BadRequestException('喷码图片大小不能超过 10MB');
+    }
+
+    // 校验标签图片（可选）
+    if (labelFile) {
+      if (!labelFile.buffer || !labelFile.mimetype || labelFile.size === undefined) {
+        throw new BadRequestException('无效的标签图片上传格式');
+      }
+      if (!this.imagePreprocessService.validateImageFormat(labelFile.mimetype)) {
+        throw new BadRequestException(`不支持的标签图片类型: ${labelFile.mimetype}`);
+      }
+      if (!this.imagePreprocessService.validateImageSize(labelFile.size, 10)) {
+        throw new BadRequestException('标签图片大小不能超过 10MB');
+      }
+    }
     const sprayCodeData = await this.spraycodeOcrService.recognizeSpraycode(sprayFile.buffer);
 
     let labelData: any = null;
@@ -341,107 +258,17 @@ export class NickelService {
   }
 
   /**
-   * 健康检查
+   * 健康检查（返回标准响应格式）
    */
-  health(): { status: string; timestamp: string; version: string } {
+  health(): { success: true; data: { status: string; version: string }; message: string; timestamp: string } {
     return {
-      status: 'ok',
+      success: true,
+      data: {
+        status: 'ok',
+        version: '2.0.0',
+      },
+      message: '服务运行正常',
       timestamp: new Date().toISOString(),
-      version: '1.0.0',
     };
-  }
-
-  // === 内部辅助方法 ===
-
-  private mergeResults(primary: any, secondary: any, stats: MergeStats): any {
-    const merged = { ...primary };
-    const allKeys = new Set([...Object.keys(primary), ...Object.keys(secondary)]);
-
-    for (const key of allKeys) {
-      if (key.startsWith('_')) continue;
-      const pv = primary[key];
-      const sv = secondary[key];
-
-      if (String(pv).toLowerCase() === String(sv).toLowerCase()) {
-        stats.consistent++;
-        continue;
-      }
-
-      if (pv === null || pv === undefined || pv === '') {
-        if (sv !== null && sv !== undefined && sv !== '') {
-          merged[key] = sv;
-          stats.volcFilled++;
-          stats.details.push({ field: key, primary: '(空)', secondary: String(sv), action: 'filled' });
-        }
-        continue;
-      }
-
-      if (sv === null || sv === undefined || sv === '') continue;
-
-      stats.conflicts++;
-      stats.details.push({ field: key, primary: String(pv), secondary: String(sv), action: 'keep_primary' });
-    }
-
-    return merged;
-  }
-
-  private threeWayMerge(model1: any, model2: any, model3: any, stats: MergeStats): any {
-    const merged = { ...model1 };
-    const allKeys = new Set([...Object.keys(model1), ...Object.keys(model2), ...Object.keys(model3)]);
-
-    for (const key of allKeys) {
-      if (key.startsWith('_')) continue;
-
-      const v1 = model1[key];
-      const v2 = model2[key];
-      const v3 = model3[key];
-
-      if (String(v1).toLowerCase() === String(v2).toLowerCase() &&
-          String(v2).toLowerCase() === String(v3).toLowerCase()) {
-        stats.consistent++;
-        continue;
-      }
-
-      const validValues: Array<{ model: string; val: any }> = [];
-      if (v1 !== null && v1 !== undefined && v1 !== '') validValues.push({ model: 'm1', val: v1 });
-      if (v2 !== null && v2 !== undefined && v2 !== '') validValues.push({ model: 'm2', val: v2 });
-      if (v3 !== null && v3 !== undefined && v3 !== '') validValues.push({ model: 'm3', val: v3 });
-
-      if (validValues.length === 0) continue;
-      if (validValues.length === 1) {
-        merged[key] = validValues[0].val;
-        stats.volcFilled++;
-        stats.details.push({ field: key, primary: '(vote)', secondary: String(validValues[0].val), action: 'single_model_filled' });
-        continue;
-      }
-
-      const voteCount: Record<string, number> = {};
-      for (const entry of validValues) {
-        const keyStr = String(entry.val).toLowerCase().trim();
-        voteCount[keyStr] = (voteCount[keyStr] || 0) + 1;
-      }
-
-      let maxVotes = 0;
-      let winner: string | null = null;
-      for (const [valKey, count] of Object.entries(voteCount)) {
-        if (count > maxVotes) { maxVotes = count; winner = valKey; }
-      }
-
-      let winnerVal = null;
-      for (const entry of validValues) {
-        if (String(entry.val).toLowerCase().trim() === winner) { winnerVal = entry.val; break; }
-      }
-
-      if (maxVotes >= 2) {
-        merged[key] = winnerVal;
-        stats.consistent++;
-        stats.details.push({ field: key, primary: String(v1), secondary: String(v2), tertiary: String(v3), action: 'majority_wins', winner: winner || '' });
-      } else {
-        stats.conflicts++;
-        stats.details.push({ field: key, primary: String(v1), secondary: String(v2), tertiary: String(v3), action: 'all_conflict_keep_primary' });
-      }
-    }
-
-    return merged;
   }
 }

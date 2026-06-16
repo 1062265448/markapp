@@ -13,6 +13,7 @@ interface CompareSummary {
   missingInSpraycode: number;
   missingInLabel: number;
   bothMissing: number;
+  overallMatch: boolean;
 }
 
 @Injectable()
@@ -160,6 +161,6 @@ export class SpraycodeCompareService {
     const missingInLabel = compareResult.filter(r => r.missingIn === 'label').length;
     const bothMissing = compareResult.filter(r => r.diffType === 'both-missing').length;
 
-    return { totalFields, matched, mismatched, missingInSpraycode, missingInLabel, bothMissing };
+    return { totalFields, matched, mismatched, missingInSpraycode, missingInLabel, bothMissing, overallMatch: mismatched === 0 && missingInSpraycode === 0 };
   }
 }

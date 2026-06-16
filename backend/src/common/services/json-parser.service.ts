@@ -32,11 +32,11 @@ function cleanJsonString(str: string): string {
  * 尝试解析 JSON，成功则检查 errorKey
  * 返回 parsed 对象或 null（解析失败）
  */
-function tryParse(str: string, errorKey?: string): any | null {
+function tryParse<T = Record<string, unknown>>(str: string, errorKey?: string): T | null {
   try {
-    const parsed = JSON.parse(str);
-    if (errorKey && parsed[errorKey]) {
-      throw new Error(parsed.message || parsed[errorKey]);
+    const parsed = JSON.parse(str) as T;
+    if (errorKey && (parsed as Record<string, unknown>)[errorKey]) {
+      throw new Error((parsed as Record<string, unknown>).message as string || (parsed as Record<string, unknown>)[errorKey] as string);
     }
     return parsed;
   } catch (e) {
@@ -55,17 +55,17 @@ function tryParse(str: string, errorKey?: string): any | null {
  * 第3层: 定位首尾花括号提取
  * 第4层: cleanJsonString 修复后重试
  */
-export function parseWithFallback(content: string, options: { errorKey?: string } = {}): any {
+export function parseWithFallback<T = Record<string, unknown>>(content: string, options: { errorKey?: string } = {}): T {
   const { errorKey } = options;
 
   // 第1层: 直接解析
-  const r1 = tryParse(content, errorKey);
+  const r1 = tryParse<T>(content, errorKey);
   if (r1 !== null) return r1;
 
   // 第2层: 提取 markdown 代码块中的 JSON
   const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlockMatch) {
-    const r2 = tryParse(codeBlockMatch[1].trim(), errorKey);
+    const r2 = tryParse<T>(codeBlockMatch[1].trim(), errorKey);
     if (r2 !== null) return r2;
   }
 
@@ -73,13 +73,13 @@ export function parseWithFallback(content: string, options: { errorKey?: string 
   const firstBrace = content.indexOf('{');
   const lastBrace = content.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace > firstBrace) {
-    const r3 = tryParse(content.slice(firstBrace, lastBrace + 1), errorKey);
+    const r3 = tryParse<T>(content.slice(firstBrace, lastBrace + 1), errorKey);
     if (r3 !== null) return r3;
   }
 
   // 第4层: cleanJsonString 修复后重试
   const cleaned = cleanJsonString(content);
-  const r4 = tryParse(cleaned, errorKey);
+  const r4 = tryParse<T>(cleaned, errorKey);
   if (r4 !== null) return r4;
 
   throw new Error('AI返回格式异常，无法解析为JSON');
@@ -87,8 +87,8 @@ export function parseWithFallback(content: string, options: { errorKey?: string 
 
 @Injectable()
 export class JsonParserService {
-  parseWithFallback(content: string, options: { errorKey?: string } = {}): any {
-    return parseWithFallback(content, options);
+  parseWithFallback<T = Record<string, unknown>>(content: string, options: { errorKey?: string } = {}): T {
+    return parseWithFallback<T>(content, options);
   }
 
   cleanJsonString(str: string): string {

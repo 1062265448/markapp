@@ -5,10 +5,15 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
+  Unique,
 } from 'typeorm';
 import { CompareRecord } from './compare-record.entity';
 
 @Entity('compare_image')
+@Unique('UQ_compare_image_recordId_imageType', ['recordId', 'imageType'])
+@Index('IDX_compare_image_recordId', ['recordId'])
+@Index('IDX_compare_image_createdAt', ['createdAt'])
 export class CompareImage {
   @PrimaryGeneratedColumn()
   id: number;

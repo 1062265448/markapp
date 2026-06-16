@@ -1,12 +1,12 @@
 import { Injectable, CanActivate, ExecutionContext, HttpException, HttpStatus, OnModuleDestroy } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { NickelConfigService } from '../../config/config.service';
 
 @Injectable()
 export class RateLimitGuard implements CanActivate, OnModuleDestroy {
   private readonly requestMap = new Map<string, { count: number; resetAt: number }>();
   private cleanupTimer: NodeJS.Timeout | null = null;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(private readonly configService: NickelConfigService) {
     this.startCleanup();
   }
 
@@ -33,8 +33,8 @@ export class RateLimitGuard implements CanActivate, OnModuleDestroy {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
     const ip = this.getClientIp(request);
-    const windowMs = this.configService.get<number>('RATE_LIMIT_WINDOW') || 60000;
-    const maxRequests = this.configService.get<number>('RATE_LIMIT_MAX') || 30;
+    const windowMs = this.configService.rateLimitWindow;
+    const maxRequests = this.configService.rateLimitMax;
 
     const now = Date.now();
     const entry = this.requestMap.get(ip);

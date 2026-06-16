@@ -26,12 +26,18 @@ import TabBar from '@/components/TabBar.vue'
 import { toasts } from '@/composables/useToast'
 
 const route = useRoute()
-const showTabBar = computed(() => route.meta.tab !== undefined)
+
+const showTabBar = computed(() => {
+  if (route.path === '/login') return false
+  if (route.meta.tab) return true
+  return false
+})
 </script>
 
 <style scoped>
 .app-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
 }
 .toast-container {

@@ -33,18 +33,14 @@ export interface CorrectionRecord {
   rule: string
 }
 
-export interface AIMeta {
-  model: string
-  primaryLatency: number
-  volcLatency: number
-  qwenLatency: number
-  glmLatency: number
-  retry: boolean
-  secondaryModel: { model: string; latency: number } | null
-  tertiaryModel: { model: string; latency: number } | null
-  secondaryError: string | null
-  tertiaryError: string | null
-  tertiarySkipped: boolean
+// OCR元数据（替代原AIMeta）
+export interface OcrMeta {
+  engine: string              // "rapid-ocr + zxing-cpp"
+  ocrLatency: number          // OCR 文本识别耗时(ms)
+  barcodeLatency: number      // 条码扫描耗时(ms)
+  lineCount: number           // OCR 识别行数
+  barcodeCount: number        // 扫描到的条码数
+  barcodeFormat: string | null // 条码格式: "CODE_128" | "QR_CODE" | etc.
 }
 
 export interface BarcodeParsed {
@@ -59,37 +55,25 @@ export interface BarcodeParsed {
   batchNoSuffix: string
   packCode: number
   expectedPackNo: string
-  netWeightEncoded: string
+  netWeightEncoded: number
   expectedNetWeight: number
   parsed: boolean
   message: string
 }
 
-export interface MergeStats {
-  consistent: number
-  volcFilled: number
-  conflicts: number
-  details: Array<{
-    field: string
-    primary?: string
-    secondary?: string
-    tertiary?: string
-    action: string
-    winner?: string
-  }>
-}
-
 export interface ConfidenceScore {
-  overall: number
-  fields: Record<string, number>
+  score: number
   level: 'high' | 'medium' | 'low'
-  summary: string
+  deductions: Array<{
+    type: string
+    count: number
+    deduction: number
+    fields?: string[]
+  }>
 }
 
 export interface RecognitionData {
   rawData: NickelLabelData | null
-  secondaryRawData: NickelLabelData | null
-  tertiaryRawData: NickelLabelData | null
   correctedData: NickelLabelData | null
   corrections: CorrectionRecord[]
   checkResults: CheckResult[]
@@ -98,8 +82,7 @@ export interface RecognitionData {
   errorCount: number
   warningCount: number
   confidence: ConfidenceScore | null
-  mergeStats: MergeStats | null
-  _aiMeta: AIMeta
+  _ocrMeta: OcrMeta
 }
 
 export interface RecognitionResult {
@@ -111,18 +94,24 @@ export interface RecognitionResult {
 
 export interface CompareResultItem {
   field: string
-  sprayValue: string | number | null
+  fieldLabelCn: string
+  fieldLabelEn: string
+  sprayCodeValue: string | number | null
+  labelValueCn: string | number | null
+  labelValueEn: string | number | null
   labelValue: string | number | null
-  match: boolean
-  message: string
+  matched: boolean | null
+  missingIn: string | null
+  diffType: string | null
 }
 
 export interface CompareSummary {
-  total: number
+  totalFields: number
   matched: number
   mismatched: number
-  missing: number
-  passRate: number
+  missingInSpraycode: number
+  missingInLabel: number
+  bothMissing: number
   overallMatch: boolean
 }
 
@@ -139,7 +128,7 @@ export interface CompareResult {
       netWeight: number | null
       grossWeight: number | null
       pieces: number | null
-      _aiMeta?: { ocrEngine: string; ocrLineCount: number; ocrLatency: number }
+      _ocrMeta?: OcrMeta
     }
   }
   message: string
@@ -155,7 +144,7 @@ export interface SpraycodeResult {
     netWeight: number | null
     grossWeight: number | null
     pieces: number | null
-    _aiMeta?: { ocrEngine: string; ocrLineCount: number; ocrLatency: number }
+    _ocrMeta?: OcrMeta
   }
   message: string
   timestamp: string
@@ -194,8 +183,8 @@ export interface RecordDetailResponse {
     id: string
     compareResults: CompareResultItem[]
     summary: CompareSummary
-    sprayCodeData: any
-    labelCodeData: any | null
+    sprayCodeData: Record<string, unknown>
+    labelCodeData: Record<string, unknown> | null
     message: string
     images: Array<{
       imageType: 'spraycode' | 'label'

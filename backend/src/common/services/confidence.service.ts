@@ -90,8 +90,8 @@ export class ConfidenceService {
   private checkBarcodeConflicts(
     rawData: NickelLabelData,
     barcodeParsed: BarcodeParsed,
-  ): Array<{ field: string; aiValue: any; barcodeValue: any }> {
-    const conflicts: Array<{ field: string; aiValue: any; barcodeValue: any }> = [];
+  ): Array<{ field: string; aiValue: string | number; barcodeValue: string | number }> {
+    const conflicts: Array<{ field: string; aiValue: string | number; barcodeValue: string | number }> = [];
 
     // 包号
     const packNo = rawData.packNo || '';

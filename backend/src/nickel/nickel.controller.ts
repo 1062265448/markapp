@@ -13,6 +13,7 @@ import {
   HttpCode,
   HttpStatus,
   Res,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { NickelService } from './nickel.service';
@@ -26,13 +27,15 @@ import * as fs from 'fs';
 @Controller('api/nickel')
 @UseGuards(ApiKeyGuard, RateLimitGuard)
 export class NickelController {
+  private readonly logger = new Logger(NickelController.name);
+
   constructor(
     private readonly nickelService: NickelService,
     private readonly historyService: NickelHistoryService,
   ) {}
 
   /**
-   * POST /api/nickel/recognize - 标签识别（三模型并行）
+   * POST /api/nickel/recognize - 标签识别（本地OCR + 条码扫描）
    */
   @Post('recognize')
   @HttpCode(HttpStatus.OK)
@@ -41,8 +44,6 @@ export class NickelController {
     @UploadedFile() file: Express.Multer.File,
     @Body() recognizeDto: RecognizeDto,
   ) {
-    const enableGLM = recognizeDto.enableGLM !== false;
-
     return this.nickelService.recognize(
       {
         buffer: file?.buffer,
@@ -50,7 +51,6 @@ export class NickelController {
         size: file?.size || 0,
       },
       recognizeDto.barcode,
-      enableGLM,
     );
   }
 
@@ -157,6 +157,15 @@ export class NickelController {
     res.setHeader('Cache-Control', 'public, max-age=86400');
 
     const stream = fs.createReadStream(imageInfo.absolutePath);
+    // 流错误处理：文件读取失败时发送 500 而非崩溃
+    stream.on('error', (err) => {
+      this.logger.error(`图片流读取失败: ${imageInfo.absolutePath}`, err.message);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: '图片读取失败', timestamp: new Date().toISOString() });
+      } else {
+        res.end();
+      }
+    });
     stream.pipe(res);
   }
 

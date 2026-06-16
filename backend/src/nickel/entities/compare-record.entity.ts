@@ -5,10 +5,13 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  Index,
 } from 'typeorm';
 import { CompareImage } from './compare-image.entity';
+import { CompareResultItem, CompareSummary, SpraycodeData } from '../types/nickel.types';
 
 @Entity('compare_record')
+@Index('IDX_compare_record_createdAt', ['createdAt'])
 export class CompareRecord {
   @PrimaryColumn('varchar', { length: 36 })
   id: string;
@@ -32,19 +35,19 @@ export class CompareRecord {
   totalFields: number | null;
 
   @Column('json', { nullable: true })
-  compareResults: any | null;
+  compareResults: CompareResultItem[] | null;
 
   @Column('json', { nullable: true })
-  summary: any | null;
+  summary: CompareSummary | null;
 
   @Column('json', { nullable: true })
-  sprayCodeData: any | null;
+  sprayCodeData: SpraycodeData | null;
 
   @Column('json', { nullable: true })
-  labelCodeData: any | null;
+  labelCodeData: SpraycodeData | null;
 
-  @Column('varchar', { length: 500 })
-  message: string;
+  @Column('varchar', { length: 500, nullable: true })
+  message: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

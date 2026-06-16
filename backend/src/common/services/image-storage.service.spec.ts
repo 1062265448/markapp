@@ -98,12 +98,12 @@ describe('ImageStorageService', () => {
         'spraycode',
       );
 
-      expect(service.imageExists(relativePath)).toBe(true);
+      expect(await service.imageExists(relativePath)).toBe(true);
 
       const result = await service.deleteImage(relativePath);
 
       expect(result).toBe(true);
-      expect(service.imageExists(relativePath)).toBe(false);
+      expect(await service.imageExists(relativePath)).toBe(false);
     });
 
     it('should return false for non-existent file', async () => {
@@ -123,11 +123,11 @@ describe('ImageStorageService', () => {
         'spraycode',
       );
 
-      expect(service.imageExists(relativePath)).toBe(true);
+      expect(await service.imageExists(relativePath)).toBe(true);
     });
 
     it('should return false for non-existent file', async () => {
-      expect(service.imageExists('no/such/file.jpg')).toBe(false);
+      expect(await service.imageExists('no/such/file.jpg')).toBe(false);
     });
   });
 
@@ -138,6 +138,10 @@ describe('ImageStorageService', () => {
       expect(abs).toContain(testDir);
       // Windows uses backslashes, so check the path is properly resolved
       expect(abs).toMatch(/compare[\\\/]\d{4}[\\\/]\d{2}[\\\/]\d{2}[\\\/]test\.jpg/);
+    });
+
+    it('should reject path traversal attempts', () => {
+      expect(() => service.getAbsolutePath('../../etc/passwd')).toThrow('非法的图片路径');
     });
   });
 
@@ -150,8 +154,8 @@ describe('ImageStorageService', () => {
       const count = await service.cleanupExpiredImages([path1, path2]);
 
       expect(count).toBe(2);
-      expect(service.imageExists(path1)).toBe(false);
-      expect(service.imageExists(path2)).toBe(false);
+      expect(await service.imageExists(path1)).toBe(false);
+      expect(await service.imageExists(path2)).toBe(false);
     });
 
     it('should handle mix of existing and non-existing files', async () => {

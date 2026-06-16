@@ -35,19 +35,14 @@ export interface CorrectionRecord {
   rule: string;
 }
 
-// AI元数据
-export interface AIMeta {
-  model: string;
-  primaryLatency: number;
-  volcLatency: number;
-  qwenLatency: number;
-  glmLatency: number;
-  retry: boolean;
-  secondaryModel: { model: string; latency: number } | null;
-  tertiaryModel: { model: string; latency: number } | null;
-  secondaryError: string | null;
-  tertiaryError: string | null;
-  tertiarySkipped: boolean;
+// OCR元数据（替代原AIMeta）
+export interface OcrMeta {
+  engine: string;              // "rapid-ocr + zxing-cpp"
+  ocrLatency: number;         // OCR 文本识别耗时(ms)
+  barcodeLatency: number;     // 条码扫描耗时(ms)
+  lineCount: number;          // OCR 识别行数
+  barcodeCount: number;       // 扫描到的条码数
+  barcodeFormat: string | null; // 条码格式: "CODE_128" | "QR_CODE" | etc.
 }
 
 // 条形码解析结果
@@ -69,21 +64,6 @@ export interface BarcodeParsed {
   message?: string;
 }
 
-// 合并统计
-export interface MergeStats {
-  consistent: number;
-  volcFilled: number;
-  conflicts: number;
-  details: Array<{
-    field: string;
-    primary?: string;
-    secondary?: string;
-    tertiary?: string;
-    action: string;
-    winner?: string;
-  }>;
-}
-
 // 置信度评分
 export interface ConfidenceScore {
   score: number;
@@ -93,15 +73,13 @@ export interface ConfidenceScore {
     count: number;
     deduction: number;
     fields?: string[];
-    details?: Array<{ field: string; aiValue: any; barcodeValue: any }>;
+    details?: Array<{ field: string; aiValue: string | number; barcodeValue: string | number }>;
   }>;
 }
 
 // 识别结果数据
 export interface RecognitionData {
   rawData: NickelLabelData | null;
-  secondaryRawData: NickelLabelData | null;
-  tertiaryRawData: NickelLabelData | null;
   correctedData: NickelLabelData | null;
   corrections: CorrectionRecord[];
   checkResults: CheckResult[];
@@ -110,8 +88,7 @@ export interface RecognitionData {
   errorCount: number;
   warningCount: number;
   confidence: ConfidenceScore | null;
-  mergeStats: MergeStats | null;
-  _aiMeta: AIMeta;
+  _ocrMeta: OcrMeta;
 }
 
 // 喷码识别结果
@@ -122,11 +99,7 @@ export interface SpraycodeResult {
   netWeight: number | null;
   grossWeight: number | null;
   pieces: number | null;
-  _aiMeta?: {
-    ocrEngine: string;
-    ocrLineCount: number;
-    ocrLatency: number;
-  };
+  _ocrMeta?: OcrMeta;
 }
 
 // 喷码对比结果
@@ -134,13 +107,35 @@ export interface CompareResultItem {
   field: string;
   fieldLabelCn: string;
   fieldLabelEn: string;
-  sprayCodeValue: any;
-  labelValueCn: any;
-  labelValueEn: any;
-  labelValue: any;
+  sprayCodeValue: string | number | null;
+  labelValueCn: string | number | null;
+  labelValueEn: string | number | null;
+  labelValue: string | number | null;
   matched: boolean | null;
   missingIn: string | null;
   diffType: string | null;
+}
+
+// 对比摘要
+export interface CompareSummary {
+  totalFields: number;
+  matched: number;
+  mismatched: number;
+  missingInSpraycode: number;
+  missingInLabel: number;
+  bothMissing: number;
+  overallMatch: boolean;
+}
+
+// 喷码数据（用于 Entity JSON 列）
+export interface SpraycodeData {
+  batchNo: string | null;
+  packNo: string | null;
+  productionDate: string | null;
+  netWeight: number | null;
+  grossWeight: number | null;
+  pieces: number | null;
+  _ocrMeta?: OcrMeta;
 }
 
 // API响应格式
@@ -164,14 +159,7 @@ export interface CompareResultResponse {
   success: boolean;
   data: {
     compareResults: CompareResultItem[];
-    summary: {
-      totalFields: number;
-      matched: number;
-      mismatched: number;
-      missingInSpraycode: number;
-      missingInLabel: number;
-      bothMissing: number;
-    };
+    summary: CompareSummary;
     sprayCodeData: SpraycodeResult;
   };
   message: string;

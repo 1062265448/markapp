@@ -1,5 +1,16 @@
 # MarkApp 开发日志
 
+## v2.1.1 — 2026-06-16
+
+### ✅ 验证
+
+- **条码识别功能验证通过**
+  - 使用 `镍板标签/喷码/标签1.JPG` 测试图片验证
+  - 确认整条识别链路畅通：拍照 → OCR 服务 `/ocr/full` → `_scan_barcodes()` → 后端 `LabelOcrService` → `BarcodeParserService` → 规则校验
+  - 修复后 `read_barcode()` 正确返回单个 Barcode 对象，不再触发 TypeError
+
+---
+
 ## v2.1.0 — 2026-06-16
 
 ### 🐛 Bug 修复

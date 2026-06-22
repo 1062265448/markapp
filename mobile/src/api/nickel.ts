@@ -77,10 +77,3 @@ export async function fetchRecordDetail(id: string): Promise<RecordDetailRespons
 export async function deleteHistoryRecord(id: string): Promise<{ success: boolean; message: string }> {
   return request.delete(`/api/nickel/history/${id}`)
 }
-
-/**
- * 健康检查
- */
-export async function healthCheck(): Promise<{ status: string; timestamp: string; version: string }> {
-  return request.get('/api/nickel/health')
-}

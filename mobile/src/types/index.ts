@@ -1,34 +1,34 @@
 // 识别结果数据结构
 export interface NickelLabelData {
+  productName: string | null
   brand: string | null
   standard: string | null
-  productName: string | null
-  specification: string | null
   batchNo: string | null
   packNo: string | null
+  pieces: number | null
   netWeight: number | null
   grossWeight: number | null
-  pieces: number | null
   productionDate: string | null
   weightBy: string | null
   address: string | null
-  barcode: string | null
+  barcode?: string | null
   _fieldLabels?: Record<string, string>
 }
 
 export interface CheckResult {
   field: string
-  ruleType: string
+  ruleType: 'format' | 'range' | 'consistency' | 'crossField' | 'labelFormat'
   passed: boolean
   severity: 'error' | 'warning' | 'info'
-  original?: string | null
-  corrected?: string | null
+  original?: string
+  corrected?: string
+  barcodeCorrection?: string
   message: string
 }
 
 export interface CorrectionRecord {
   field: string
-  original: string | null
+  original: string
   corrected: string
   rule: string
 }
@@ -49,7 +49,7 @@ export interface BarcodeParsed {
   month: string
   day: string
   productionDateCode: string
-  productionDate: string
+  productionDate?: string
   workshopCode: number
   workshopName: string
   batchNoSuffix: string
@@ -58,7 +58,7 @@ export interface BarcodeParsed {
   netWeightEncoded: number
   expectedNetWeight: number
   parsed: boolean
-  message: string
+  message?: string
 }
 
 export interface ConfidenceScore {
@@ -69,6 +69,7 @@ export interface ConfidenceScore {
     count: number
     deduction: number
     fields?: string[]
+    details?: Array<{ field: string; aiValue: string | number; barcodeValue: string | number }>
   }>
 }
 

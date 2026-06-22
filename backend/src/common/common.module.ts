@@ -7,7 +7,6 @@ import { BarcodeParserService } from './services/barcode-parser.service';
 import { ConfidenceService } from './services/confidence.service';
 import { SpraycodeOcrService } from './services/spraycode-ocr.service';
 import { SpraycodeCompareService } from './services/spraycode-compare.service';
-import { JsonParserService } from './services/json-parser.service';
 import { ImageStorageService } from './services/image-storage.service';
 
 @Global()
@@ -21,7 +20,6 @@ import { ImageStorageService } from './services/image-storage.service';
     ConfidenceService,
     SpraycodeOcrService,
     SpraycodeCompareService,
-    JsonParserService,
     ImageStorageService,
   ],
   exports: [
@@ -32,7 +30,6 @@ import { ImageStorageService } from './services/image-storage.service';
     ConfidenceService,
     SpraycodeOcrService,
     SpraycodeCompareService,
-    JsonParserService,
     ImageStorageService,
   ],
 })

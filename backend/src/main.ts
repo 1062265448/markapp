@@ -6,13 +6,20 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    cors: {
-      origin: process.env.CORS_ORIGIN?.split(',').map(s => s.trim()) || [],
-      methods: ['GET', 'POST', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'x-api-key', 'Authorization'],
-      credentials: true,
-    },
     logger: ['log', 'warn', 'error'],
+  });
+
+  // 通过 ConfigService 读取 CORS 配置
+  const configService = app.get(NickelConfigService);
+  const corsOrigins = configService.corsOrigin
+    ? configService.corsOrigin.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+
+  app.enableCors({
+    origin: corsOrigins,
+    methods: ['GET', 'POST', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'x-api-key', 'Authorization'],
+    credentials: true,
   });
 
   app.useGlobalFilters(new AllExceptionsFilter());
@@ -36,7 +43,6 @@ async function bootstrap() {
     next();
   });
 
-  const configService = app.get(NickelConfigService);
   const port = configService.port;
 
   await app.listen(port);

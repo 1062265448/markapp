@@ -1,0 +1,166 @@
+/**
+ * OCR 共享工具方法
+ * 提取自 LabelOcrService 和 SpraycodeOcrService 的重复逻辑
+ */
+
+// OCR /ocr/full 端点返回的单张图片结果
+export interface OcrFullResult {
+  lines: Array<{ text: string; confidence: number }>;
+  lineCount: number;
+  ocrLatencyMs: number;
+  barcodes: Array<{ text: string; format: string }>;
+  barcodeCount: number;
+  barcodeLatencyMs: number;
+}
+
+// OCR /ocr/text 端点返回的单张图片结果
+export interface OcrTextResult {
+  lines: Array<{ text: string; confidence: number }>;
+  lineCount: number;
+  latencyMs: number;
+}
+
+/**
+ * OCR 字符纠错映射（O→0, o→0, l→1, I→1）
+ */
+export function normalizeDigits(str: string): string {
+  return str.replace(/[OolI]/g, ch => {
+    const map: Record<string, string> = { 'O': '0', 'o': '0', 'l': '1', 'I': '1' };
+    return map[ch] || ch;
+  });
+}
+
+/**
+ * 标准化批号格式
+ */
+export function normalizeBatchNo(raw: string): string {
+  let s = raw.trim();
+  s = s.replace(/[—–‐]/g, '-');
+  s = s.replace(/(\d)/g, (m) => normalizeDigits(m));
+  return s;
+}
+
+/**
+ * 标准化日期格式为 YYYY-MM-DD
+ */
+export function normalizeDate(raw: string): string {
+  let s = raw.trim().replace(/[\/.]/g, '-');
+  s = normalizeDigits(s);
+  const parts = s.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 2) parts[0] = '20' + parts[0];
+    if (parts[1].length === 1) parts[1] = '0' + parts[1];
+    if (parts[2].length === 1) parts[2] = '0' + parts[2];
+    return parts.join('-');
+  }
+  return s;
+}
+
+/**
+ * 标准化重量值（去除单位、千分位、纠错字符）
+ */
+export function normalizeWeight(raw: string): number | null {
+  let s = raw.trim()
+    .replace(/\s*(Kg|KG|kg)\s*/gi, '')
+    .replace(/,/g, '');
+  s = normalizeDigits(s);
+  const num = parseFloat(s);
+  return isNaN(num) ? null : num;
+}
+
+/**
+ * 从条码扫描结果中选择最佳条码
+ * 优先选择含数字条码格式（25位数字或6段空格分隔）的结果
+ */
+export function pickBestBarcode(barcodes: Array<{ text: string; format: string }>): string | null {
+  if (barcodes.length === 0) return null;
+
+  // 优先选择包含 6 段或 25 位数字的条码（镍板数字条码格式）
+  const digitPattern = /^[\d\s]{20,}$/;
+  const best = barcodes.find(b => digitPattern.test(b.text));
+  if (best) return best.text.trim();
+
+  // 其次选择最长的条码
+  const sorted = [...barcodes].sort((a, b) => b.text.length - a.text.length);
+  return sorted[0].text.trim();
+}
+
+/**
+ * 调用 OCR 服务 /ocr/full 端点（文本 + 条码扫描）
+ * 失败时自动降级到 /ocr/text
+ */
+export async function callOcrFull(
+  imageBuffer: Buffer,
+  rapidOcrUrl: string,
+): Promise<OcrFullResult> {
+  const base64 = imageBuffer.toString('base64');
+
+  try {
+    const response = await callOcrEndpoint(rapidOcrUrl + '/ocr/full', base64, 15000);
+    if (response) {
+      const result = response as OcrFullResult;
+      if (result.lines && result.lines.length > 0) {
+        return result;
+      }
+    }
+  } catch (e) {
+    console.warn('[OCR] /ocr/full 调用失败:', (e as Error).message);
+    // 降级到 /ocr/text（仅文本，无条码）
+    try {
+      const fallbackResponse = await callOcrTextEndpoint(rapidOcrUrl + '/ocr/text', base64, 10000);
+      if (fallbackResponse) {
+        const item = fallbackResponse;
+        return {
+          lines: item.lines || [],
+          lineCount: item.lineCount || 0,
+          ocrLatencyMs: item.latencyMs || 0,
+          barcodes: [],
+          barcodeCount: 0,
+          barcodeLatencyMs: 0,
+        };
+      }
+    } catch (e2) {
+      console.warn('[OCR] /ocr/text 降级也失败:', (e2 as Error).message);
+    }
+  }
+
+  // 全部失败时返回空结果
+  return {
+    lines: [],
+    lineCount: 0,
+    ocrLatencyMs: 0,
+    barcodes: [],
+    barcodeCount: 0,
+    barcodeLatencyMs: 0,
+  };
+}
+
+// ── 内部辅助 ──
+
+import axios from 'axios';
+
+async function callOcrEndpoint(url: string, base64: string, timeout: number): Promise<any> {
+  const response = await axios.post(
+    url,
+    { images: [`data:image/jpeg;base64,${base64}`] },
+    { timeout },
+  );
+  const result = response.data;
+  if (result?.success && result?.data?.length > 0) {
+    return result.data[0];
+  }
+  return null;
+}
+
+async function callOcrTextEndpoint(url: string, base64: string, timeout: number): Promise<any> {
+  const response = await axios.post(
+    url,
+    { images: [`data:image/jpeg;base64,${base64}`] },
+    { timeout },
+  );
+  const result = response.data;
+  if (result?.success && result?.data?.length > 0) {
+    return result.data[0];
+  }
+  return null;
+}

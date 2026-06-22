@@ -5,8 +5,8 @@
       <span class="summary-icon">{{ overallMatch ? '✓' : '✗' }}</span>
       <span class="summary-text">{{ overallMatch ? '对比一致' : '对比不一致' }}</span>
       <span class="summary-rate" v-if="summary">
-        通过率 {{ (summary.passRate * 100).toFixed(0) }}%
-        ({{ summary.matched }}/{{ summary.total }})
+        通过率 {{ ((summary.matched / summary.totalFields) * 100).toFixed(0) }}%
+        ({{ summary.matched }}/{{ summary.totalFields }})
       </span>
     </div>
 
@@ -18,16 +18,16 @@
           v-for="(item, i) in compareResults"
           :key="i"
           class="compare-row"
-          :class="{ match: item.match, mismatch: !item.match }"
+          :class="{ match: item.matched, mismatch: !item.matched }"
         >
-          <span class="compare-icon">{{ item.match ? '✓' : '✗' }}</span>
+          <span class="compare-icon">{{ item.matched ? '✓' : '✗' }}</span>
           <div class="compare-content">
             <span class="compare-field">{{ item.field }}</span>
             <div class="compare-values">
-              <span class="val-spray">喷码: {{ item.sprayValue ?? '-' }}</span>
+              <span class="val-spray">喷码: {{ item.sprayCodeValue ?? '-' }}</span>
               <span class="val-label">标签: {{ item.labelValue ?? '-' }}</span>
             </div>
-            <span class="compare-msg" v-if="item.message">{{ item.message }}</span>
+            <span class="compare-msg" v-if="item.diffType">{{ item.diffType }}</span>
           </div>
         </div>
       </div>
@@ -48,8 +48,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { CompareResult } from '@/types'
 
-const props = defineProps<{ result: any }>()
+const props = defineProps<{ result: CompareResult }>()
 
 const compareResults = computed(() => props.result?.data?.compareResults || [])
 const summary = computed(() => props.result?.data?.summary || null)

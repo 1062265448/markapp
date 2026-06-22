@@ -56,7 +56,7 @@
 
     <!-- Compare Button -->
     <section class="action-section fade-up">
-      <button class="btn-primary" @click="doCompare" :disabled="loading || !sprayBlob">
+      <button class="btn-primary" @click="doCompare" :disabled="loading || cameraLoading || !sprayBlob">
         <span v-if="loading" class="spinner" style="margin-right:8px;"></span>
         {{ loading ? '对比中...' : '开始对比' }}
       </button>
@@ -74,11 +74,11 @@
           <div class="action-sheet" @click.stop>
             <div class="sheet-handle"></div>
             <div class="sheet-title">选择图片来源</div>
-            <button class="sheet-option" @click="sprayMode ? openSprayCamera() : openLabelCamera()">
+            <button class="sheet-option" :disabled="cameraLoading" @click="sprayMode ? openSprayCamera() : openLabelCamera()">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 1-1.7l9-5.2a2 2 0 0 1 2 0l9 5.2A2 2 0 0 1 23 8z"/><circle cx="12" cy="13" r="4"/></svg>
               <span>拍照</span>
             </button>
-            <button class="sheet-option" @click="sprayMode ? openSprayGallery() : openLabelGallery()">
+            <button class="sheet-option" :disabled="cameraLoading" @click="sprayMode ? openSprayGallery() : openLabelGallery()">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
               <span>从相册选择</span>
             </button>

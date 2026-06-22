@@ -44,17 +44,55 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { useHistoryStore } from '@/stores/history'
-import type { CompareResult, CompareSummary, CompareResultItem } from '@/types'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { fetchRecordDetail } from '@/api/nickel'
+import type { CompareResult, CompareSummary, CompareResultItem, HistoryRecord } from '@/types'
 
 const router = useRouter()
-const historyStore = useHistoryStore()
+const route = useRoute()
 
-const record = computed(() => {
-  const r = historyStore.records.find(rec => rec.type === 'compare' && rec.result)
-  return r || null
+const record = ref<HistoryRecord | null>(null)
+
+onMounted(async () => {
+  // 优先从 sessionStorage 读取（HistoryView 写入）
+  const cached = sessionStorage.getItem('markapp_detail')
+  if (cached) {
+    try {
+      record.value = JSON.parse(cached)
+    } catch { /* ignore parse error */ }
+    sessionStorage.removeItem('markapp_detail')
+  }
+
+  // 如果 sessionStorage 无数据，通过 route.params.id 从服务端获取
+  const id = route.params.id as string
+  if (!record.value && id) {
+    try {
+      const res = await fetchRecordDetail(id)
+      if (res.success && res.data) {
+        record.value = {
+          id: res.data.id,
+          type: 'compare',
+          timestamp: res.data.createdAt,
+          thumbnail: res.data.images?.find(i => i.imageType === 'spraycode')?.url || undefined,
+          summary: res.data.summary?.overallMatch ? '对比一致' : '对比不一致',
+          result: {
+            success: true,
+            data: {
+              id: res.data.id,
+              compareResults: res.data.compareResults,
+              summary: res.data.summary,
+              sprayCodeData: res.data.sprayCodeData,
+            },
+            message: res.data.message,
+            timestamp: res.data.createdAt,
+          } as CompareResult,
+        }
+      }
+    } catch (e) {
+      console.warn('[ResultView] 获取记录详情失败:', e instanceof Error ? e.message : e)
+    }
+  }
 })
 
 const compareData = computed(() => (record.value?.result as CompareResult)?.data || null)

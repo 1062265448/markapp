@@ -53,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHistoryStore } from '@/stores/history'
 import { useToast } from '@/composables/useToast'
@@ -73,6 +73,13 @@ const typeLabels: Record<string, string> = {
 const records = computed(() => historyStore.records)
 const loading = computed(() => historyStore.loading)
 const hasMore = computed(() => historyStore.hasMore)
+
+// 按需加载：在 HistoryView 挂载时触发，而非 store 初始化时
+onMounted(() => {
+  if (historyStore.records.length === 0) {
+    historyStore.load()
+  }
+})
 
 const formatTime = (ts: string) => {
   const d = new Date(ts)

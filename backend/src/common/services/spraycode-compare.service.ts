@@ -1,19 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { CompareResultItem } from '../../nickel/types/nickel.types';
+import { CompareResultItem, CompareSummary } from '../../nickel/types/nickel.types';
 
 interface LabelFieldValue {
   cn: string | null;
   en: string | null;
-}
-
-interface CompareSummary {
-  totalFields: number;
-  matched: number;
-  mismatched: number;
-  missingInSpraycode: number;
-  missingInLabel: number;
-  bothMissing: number;
-  overallMatch: boolean;
 }
 
 @Injectable()

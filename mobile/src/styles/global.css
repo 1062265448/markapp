@@ -245,5 +245,10 @@ img {
     --red-soft: rgba(220, 38, 38, 0.15);
     --blue-soft: rgba(37, 99, 235, 0.15);
     --accent-soft: rgba(255, 107, 53, 0.15);
+    --green-border: rgba(5, 150, 105, 0.3);
+    --red-border: rgba(220, 38, 38, 0.3);
+    --accent-border: rgba(255, 107, 53, 0.3);
+    --bg-secondary: #151515;
+    --bg-elevated: #1A1A1A;
   }
 }

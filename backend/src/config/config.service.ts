@@ -5,56 +5,8 @@ import { ConfigService } from '@nestjs/config';
 export class NickelConfigService {
   constructor(private configService: ConfigService) {}
 
-  get qwenApiKey(): string {
-    return this.configService.get<string>('QWEN_API_KEY', '');
-  }
-
   get apiKey(): string {
     return this.configService.get<string>('API_KEY', '');
-  }
-
-  get qwenBaseUrl(): string {
-    return (
-      this.configService.get<string>('QWEN_BASE_URL') ||
-      'https://dashscope.aliyuncs.com/compatible-mode/v1'
-    );
-  }
-
-  get volcApiKey(): string {
-    return this.configService.get<string>('VOLC_API_KEY', '');
-  }
-
-  get volcBaseUrl(): string {
-    return (
-      this.configService.get<string>('VOLC_BASE_URL') ||
-      'https://ark.cn-beijing.volces.com/api/v3/chat/completions'
-    );
-  }
-
-  get volcModel(): string {
-    return (
-      this.configService.get<string>('VOLC_MODEL') ||
-      'doubao-1-5-vision-pro-32k-250115'
-    );
-  }
-
-  get glmApiKey(): string {
-    return this.configService.get<string>('GLM_API_KEY', '');
-  }
-
-  get glmApiKey2(): string {
-    return this.configService.get<string>('GLM_API_KEY_2', '');
-  }
-
-  get glmApiKey3(): string {
-    return this.configService.get<string>('GLM_API_KEY_3', '');
-  }
-
-  get glmBaseUrl(): string {
-    return (
-      this.configService.get<string>('GLM_BASE_URL') ||
-      'https://open.bigmodel.cn/api/paas/v4/chat/completions'
-    );
   }
 
   get rapidOcrUrl(): string {

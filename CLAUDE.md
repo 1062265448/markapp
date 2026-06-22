@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-基于 AI 三模型投票的镍板标签智能识别系统。移动端拍照上传镍板标签图片，后端调用三个视觉大模型并行识别，投票合并结果，并执行规则校验、自动纠错和置信度评分。支持喷码 OCR 识别和喷码与标签信息一致性对比。
+基于本地 OCR + 条码扫描的镍板标签智能识别系统。移动端拍照上传镍板标签图片，后端调用 RapidOCR 本地 OCR 识别 + zxing-cpp 条码扫描，执行规则校验、自动纠错和置信度评分。支持喷码 OCR 识别和喷码与标签信息一致性对比。
 
 ## 架构
 
@@ -10,32 +10,29 @@
 markapp/
 ├── backend/               # NestJS 11 后端 API（端口 3003）
 │   ├── src/
-│   │   ├── main.ts              # 启动入口（CORS、全局管道、异常过滤器、shutdown hooks）
+│   │   ├── main.ts              # 启动入口（CORS via ConfigService、全局管道、异常过滤器、shutdown hooks）
 │   │   ├── app.module.ts        # 根模块（TypeORM + MySQL、ScheduleModule、ConfigModule）
 │   │   ├── config/              # 配置模块
 │   │   │   ├── config.module.ts
 │   │   │   └── config.service.ts      # NickelConfigService — 所有环境变量集中读取
-│   │   ├── common/              # 公共模块
+│   │   ├── common/              # 公共模块（@Global）
 │   │   │   ├── common.module.ts
 │   │   │   ├── filters/
 │   │   │   │   └── http-exception.filter.ts  # AllExceptionsFilter — 防堆栈泄露
 │   │   │   └── services/
-│   │   │       ├── qwen-ai.service.ts       # 阿里 Qwen VL（重试2次，1s退避）
-│   │   │       ├── volc-ai.service.ts       # 火山引擎 Doubao Vision（重试2次）
-│   │   │       ├── glm-ai.service.ts        # 智谱 GLM-4V（支持3个API Key轮换）
-│   │   │       ├── nickel-prompt.service.ts # AI Prompt 模板
+│   │   │       ├── ocr-utils.ts           # OCR 共享工具（normalizeDigits/Date/Weight/BatchNo、callOcrFull、pickBestBarcode）
+│   │   │       ├── label-ocr.service.ts  # 标签 OCR 识别（RapidOCR + zxing-cpp）
+│   │   │       ├── spraycode-ocr.service.ts  # 喷码 OCR 识别（RapidOCR + zxing-cpp）
 │   │   │       ├── barcode-parser.service.ts # 条码解析（车间/批号/包号/重量编码）
-│   │   │       ├── rule-checker.service.ts  # 规则校验 + 自动纠错（O→0、l→1等）
-│   │   │       ├── confidence.service.ts    # 置信度评分（null字段/纠正/校验维度）
-│   │   │       ├── json-parser.service.ts   # AI响应JSON多层兜底解析
-│   │   │       ├── image-preprocess.service.ts  # 图片格式/大小验证+预处理
-│   │   │       ├── spraycode-ocr.service.ts     # RapidOCR + Qwen VL 喷码识别
+│   │   │       ├── rule-checker.service.ts   # 规则校验 + 自动纠错（O→0、l→1等）
+│   │   │       ├── confidence.service.ts     # 置信度评分（null字段/纠正/校验维度）
 │   │   │       ├── spraycode-compare.service.ts # 喷码与标签字段对比
+│   │   │       ├── image-preprocess.service.ts  # 图片格式/大小验证+预处理
 │   │   │       └── image-storage.service.ts     # 本地文件系统图片存储（按日期目录）
 │   │   └── nickel/              # 业务模块
 │   │       ├── nickel.module.ts
 │   │       ├── nickel.controller.ts    # REST API 端点
-│   │       ├── nickel.service.ts       # 核心业务：三模型并行→投票合并→纠错→校验→评分
+│   │       ├── nickel.service.ts       # 核心业务：OCR识别→纠错→校验→评分
 │   │       ├── nickel-history.service.ts # MySQL 对比记录 CRUD + 定时清理
 │   │       ├── dto/recognize.dto.ts
 │   │       ├── guards/
@@ -55,7 +52,7 @@ markapp/
     │   ├── App.vue
     │   ├── api/
     │   │   ├── request.ts            # Axios 实例（原生/浏览器环境自动切换 baseURL）
-    │   │   └── nickel.ts            # API 封装（recognize/spraycode/compare/history/health）
+    │   │   └── nickel.ts            # API 封装（recognize/spraycode/compare/history）
     │   ├── components/
     │   │   ├── ResultCard.vue        # 标签识别结果卡片
     │   │   ├── CompareResultCard.vue # 对比结果卡片
@@ -67,9 +64,12 @@ markapp/
     │   │   ├── HomeView.vue          # 标签识别首页
     │   │   ├── CompareView.vue       # 喷码对比页
     │   │   ├── ResultView.vue        # 结果详情页
-    │   │   └── HistoryView.vue       # 历史记录页（分页+服务端API驱动）
+    │   │   ├── HistoryView.vue       # 历史记录页（分页+服务端API驱动）
+    │   │   ├── LoginView.vue         # 登录页
+    │   │   └── ProfileView.vue      # 个人资料页
     │   ├── stores/
-    │   │   └── history.ts            # Pinia 历史状态（服务端API + 本地即时缓存）
+    │   │   ├── auth.ts              # 认证状态（demo stub）
+    │   │   └── history.ts           # Pinia 历史状态（服务端API按需加载）
     │   ├── router/index.ts           # Hash 路由 + 404 兜底
     │   ├── types/index.ts            # 前端类型定义
     │   └── styles/                   # 全局样式 + CSS 变量
@@ -85,7 +85,7 @@ markapp/
 
 | 方法 | 路径 | 说明 | 关键参数 |
 |------|------|------|----------|
-| POST | `/api/nickel/recognize` | 标签识别（三模型并行） | `file`(multipart), `barcode?`, `enableGLM?` |
+| POST | `/api/nickel/recognize` | 标签识别（本地OCR+条码） | `file`(multipart), `barcode?` |
 | POST | `/api/nickel/spraycode` | 喷码 OCR 识别 | `file`(multipart) |
 | POST | `/api/nickel/compare` | 喷码对比（自动保存记录+图片） | `files`(multipart, 1-2张), `barcode?` |
 | GET | `/api/nickel/history` | 历史记录列表（分页） | `page?`, `limit?` |
@@ -101,13 +101,10 @@ markapp/
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `PORT` | 服务端口 | 3003 |
-| `NODE_ENV` | 环境 | development |
+| `NODE_ENV` | 环境 | production |
 | `API_KEY` | API 认证密钥 | — |
 | `API_KEY_ENABLED` | 启用 API Key 认证 | — |
-| `QWEN_API_KEY` | 阿里 Qwen API Key | — |
-| `VOLC_API_KEY` | 火山引擎 API Key | — |
-| `VOLC_MODEL` | 火山模型 ID | `doubao-1-5-vision-pro-32k-250115` |
-| `GLM_API_KEY` / `GLM_API_KEY_2` / `GLM_API_KEY_3` | 智谱 GLM API Key（可轮换） | — |
+| `CORS_ORIGIN` | CORS 允许源（逗号分隔） | — |
 | `RAPID_OCR_URL` | RapidOCR 服务地址 | `http://localhost:8866` |
 | `RATE_LIMIT_WINDOW` | 限流窗口(ms) | 60000 |
 | `RATE_LIMIT_MAX` | 限流最大请求数 | 30 |
@@ -135,7 +132,7 @@ cd backend
 cp .env.example .env          # 配置环境变量
 npm install
 npm run start:dev              # 开发模式（端口 3003）
-npm test                       # 运行单元测试（107 个用例）
+npm test                       # 运行单元测试（108 个用例）
 npm run test:cov               # 测试 + 覆盖率
 
 # 移动端
@@ -151,16 +148,15 @@ npm run cap:build              # 构建并同步到 Android
 
 1. **图片验证** — 格式(JPG/PNG/GIF/WebP) + 大小(≤10MB)
 2. **图像预处理** — `image-preprocess.service.ts`
-3. **三模型并行调用** — Volc Doubao + Qwen VL + GLM-4V（可关闭 GLM）
-4. **投票合并** — 单模型直接取值 / 双模型主从填充 / 三模型多数投票
-5. **自动纠错** — `rule-checker.service.ts`（O→0、l→1、I→1 等常见 OCR 混淆）
-6. **规则校验** — 批号格式、包号范围、日期合法性、重量范围、交叉校验
-7. **条码解析** — `barcode-parser.service.ts`（车间代码、生产日期、包号/重量编码）
-8. **置信度评分** — `confidence.service.ts`（null 字段扣分、纠正次数扣分、校验错误扣分）
+3. **本地 OCR + 条码扫描** — `label-ocr.service.ts`（RapidOCR `/ocr/full` → 降级 `/ocr/text`）
+4. **自动纠错** — `rule-checker.service.ts`（O→0、l→1、I→1 等常见 OCR 混淆）
+5. **规则校验** — 批号格式、包号范围、日期合法性、重量范围、交叉校验
+6. **条码解析** — `barcode-parser.service.ts`（车间代码、生产日期、包号/重量编码）
+7. **置信度评分** — `confidence.service.ts`（null 字段扣分、纠正次数扣分、校验错误扣分）
 
 ### 喷码对比（`nickel.service.ts → compare()`）
 
-1. 喷码 OCR 识别（RapidOCR + Qwen VL）
+1. 喷码 OCR 识别（RapidOCR + zxing-cpp 条码扫描）
 2. 标签识别（复用 recognize 流程，如果提供标签图）
 3. 字段对比（`spraycode-compare.service.ts`）
 4. 保存记录到 MySQL + 图片到本地文件系统
@@ -186,9 +182,8 @@ npm run cap:build              # 构建并同步到 Android
 | 状态管理 | Pinia |
 | 路由 | Vue Router 4 (Hash 模式) |
 | 移动端 | Capacitor 8 (Android) |
-| AI 模型 | 火山引擎 Doubao Vision、阿里 Qwen VL、智谱 GLM-4V |
-| OCR | RapidOCR（自部署服务）、Qwen VL OCR |
-| 测试 | Jest 29 + ts-jest（107 个用例） |
+| OCR | RapidOCR（自部署 HTTP 服务）+ zxing-cpp 条码扫描 |
+| 测试 | Jest 29 + ts-jest（108 个用例） |
 
 ## 编码规范
 
@@ -202,7 +197,7 @@ npm run cap:build              # 构建并同步到 Android
 
 ## 测试
 
-后端 6 个测试套件、107 个用例：
+后端 7 个测试套件、108 个用例：
 
 | 套件 | 文件 | 用例数 |
 |------|------|--------|
@@ -218,7 +213,7 @@ npm run cap:build              # 构建并同步到 Android
 
 ## 已知注意事项
 
-- 本地有 1 个未推送的提交（`3e96194 feat: MySQL数据库持久化`），需 `git push`
+- 有 4 个未推送的提交（含 MySQL 持久化、本地 OCR 迁移等），需 `git push`
 - `.env` 文件被 `.gitignore` 排除，部署时需手动配置
 - `uploads/` 目录被 `.gitignore` 排除（运行时图片存储）
 - MySQL 需单独部署（推荐 Docker: `markapp-mysql`，端口 3307，utf8mb4）

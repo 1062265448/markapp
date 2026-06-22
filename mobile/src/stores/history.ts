@@ -150,9 +150,6 @@ export const useHistoryStore = defineStore('history', () => {
     return records.value[0]
   })
 
-  // 初始化加载
-  load()
-
   return {
     records, recent, loading, total, page, totalPages, hasMore, currentRecord,
     addRecognize, addSpraycode, addCompare, remove, clear, load, loadMore,

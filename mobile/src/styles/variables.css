@@ -4,18 +4,23 @@
   --accent-soft: rgba(255, 107, 53, 0.08);
   --accent-hover: #E55A2B;
   --accent-glow: rgba(255, 107, 53, 0.12);
+  --accent-border: rgba(255, 107, 53, 0.25);
 
   --green: #059669;
   --green-soft: #ECFDF5;
+  --green-border: #A7F3D0;
   --amber: #D97706;
   --amber-soft: #FFFBEB;
   --red: #DC2626;
   --red-soft: #FEF2F2;
+  --red-border: #FECACA;
   --blue: #2563EB;
   --blue-soft: #EFF6FF;
 
   /* Background & surface — warm gray */
   --bg: #F8F9FA;
+  --bg-secondary: #F1F3F5;
+  --bg-elevated: #FFFFFF;
   --surface: #FFFFFF;
   --surface-alt: #F1F3F5;
 
@@ -53,6 +58,7 @@
   --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
+  --space-10: 40px;
 
   /* ===== Layout ===== */
   --tab-height: 80px;

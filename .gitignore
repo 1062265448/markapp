@@ -38,3 +38,9 @@ mobile/android/.gradle/
 # Test photos
 é•æ¿æ ‡ç­¾/
 å–·ç ç…§ç‰‡/
+
+# Test photos (too large for git)
+¿â´æÕÕÆ¬/
+
+# Local SDK config
+mobile/android/local.properties

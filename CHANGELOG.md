@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.3.0] - 2026-06-25
+
+### 🐛 Bug 修复
+- TypeORM 历史记录查询报错：数组 where 语法改为 `In()` 操作符
+- Mixed Content 混合内容阻止 HTTP 请求：新增 `cleartext: true` + `network_security_config.xml`
+- 真机安装失败 (INSTALL_FAILED_USER_RESTRICTED)：需开启小米 USB 安装权限
+
+### 🎨 UI 优化
+- 全站 iOS 设计语言改版（色彩、圆角、阴影、间距）
+- 底部 TabBar 毛玻璃效果 + 活跃指示器动画
+- 首页双按钮网格布局
+- 对比页双图片上传区
+- 历史记录卡片式列表
+- 结果详情页字段对比卡片
+- 登录页品牌动画
+- 个人中心功能列表
+
+### 🔧 原生适配
+- 状态栏适配（CoordinatorLayout + WindowCompat + fitsSystemWindows）
+- 网络安全配置（允许局域网 HTTP）
+- Safe Area 处理
+
 ## [2.0.0] - 2026-06-16
 
 ### 🚀 重大架构变更：停用 AI 模型，全面本地 OCR 识别

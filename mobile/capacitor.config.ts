@@ -7,7 +7,7 @@ const config: CapacitorConfig = {
   server: {
     // 开发模式：取消注释指向 Vite 地址即可
     // url: 'http://192.168.10.179:5181',
-    // cleartext: true,
+    cleartext: true,
     androidScheme: 'https',
   },
   android: {
@@ -17,12 +17,13 @@ const config: CapacitorConfig = {
     SplashScreen: {
       launchShowDuration: 1500,
       launchAutoHide: true,
-      backgroundColor: '#F8F9FA',
+      backgroundColor: '#FFFFFF',
       showSpinner: false,
     },
     StatusBar: {
       style: 'LIGHT',
-      backgroundColor: '#F8F9FA',
+      backgroundColor: '#FFFFFF',
+      overlaysWebView: false,
     },
     Camera: {
       presentationStyle: 'fullscreen',

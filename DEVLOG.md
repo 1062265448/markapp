@@ -1,5 +1,97 @@
 # MarkApp 开发日志
 
+## v2.3.0 — 2026-06-25
+
+### 🐛 Bug 修复
+
+- **TypeORM 查询历史记录报错 `Property "0" not found in CompareRecord`**
+  - `nickel-history.service.ts` 使用数组 where 语法查询关联图片
+  - `recordId` 是 `@ManyToOne` 关系字段，TypeORM 尝试通过关联实体解析导致报错
+  - 修复：改用 `In()` 操作符 `where: { recordId: In(recordIds) }`
+
+- **Mixed Content 混合内容阻止 HTTP 请求**
+  - Capacitor 用 HTTPS 加载页面（`androidScheme: 'https'`），后端用 HTTP
+  - WebView 拦截 HTTP 请求，导致"网络错误"
+  - 修复：`capacitor.config.ts` 设置 `cleartext: true`
+  - 新建 `network_security_config.xml` 允许局域网 IP 明文 HTTP
+  - `AndroidManifest.xml` 引用 `networkSecurityConfig`
+
+- **真机无法安装 APK (INSTALL_FAILED_USER_RESTRICTED)**
+  - 小米手机需开启「USB 安装」权限（开发者选项中）
+
+### 🎨 UI 优化
+
+- **全站 UI 大改版 — iOS 设计语言**
+  - 重新设计色彩系统（iOS 系统蓝 + 灰度层级）
+  - 统一圆角、阴影、间距规范
+  - 新增 CSS 变量：`--bg-elevated`、`--accent-border`、`--green-border` 等
+  - 暗色模式全面适配
+
+- **底部 TabBar 重构**
+  - iOS 风格毛玻璃背景（`backdrop-filter: blur`）
+  - 活跃指示器动画（圆点缩放）
+  - 4 个 Tab：识别 / 对比 / 历史 / 我的
+
+- **首页 HomeView 重设计**
+  - 双按钮网格布局（拍照 / 相册）
+  - iOS 风格选项卡片（条形码输入 + GLM 开关）
+  - 结果卡片动画（fadeUp）
+
+- **对比页 CompareView 优化**
+  - 双图片上传区（喷码 + 标签可选）
+  - 图片预览卡片 + 清除按钮
+  - Action Sheet 选择来源
+
+- **历史记录页 HistoryView 改版**
+  - 卡片式列表布局
+  - 缩略图 + 匹配状态指示
+  - 空状态引导页
+
+- **结果详情页 ResultView 优化**
+  - 状态头部（成功/失败图标 + 动画）
+  - 字段对比卡片（绿色匹配/红色不匹配）
+  - 图片查看器
+
+- **登录页 LoginView 美化**
+  - 品牌图标浮动动画
+  - 输入框聚焦光晕效果
+  - 按钮点击缩放反馈
+
+- **个人中心 ProfileView 重设计**
+  - 用户头像 + 角色标签
+  - iOS 风格功能列表
+  - 退出登录二次确认
+
+### 🔧 原生适配
+
+- **状态栏适配（4 文件联改）**
+  - `capacitor.config.ts`：StatusBar `overlaysWebView: false`，背景色白色
+  - `MainActivity.java`：`WindowCompat.setDecorFitsSystemWindows(getWindow(), true)`
+  - `activity_main.xml`：CoordinatorLayout `fitsSystemWindows="true"`
+  - `styles.xml`：`windowDrawsSystemBarBackgrounds` + `statusBarColor: transparent`
+
+- **网络安全配置**
+  - 新建 `network_security_config.xml`，允许局域网 IP 明文 HTTP
+  - `AndroidManifest.xml` 引用配置
+
+- **Safe Area 处理**
+  - `global.css`：`body` 添加 `padding-top: env(safe-area-inset-top, 24px)`
+  - 各页面 header 添加 `padding-top: var(--safe-top)`
+
+### 🔧 后端修复
+
+- **TypeORM `In()` 操作符引入**
+  - `nickel-history.service.ts` 添加 `In` import
+  - 修复关联图片查询的数组 where 语法问题
+
+### 📦 依赖 & 配置
+
+- **移动端环境变量**
+  - 新建 `mobile/.env` 配置 `VITE_NATIVE_API_URL`
+  - 支持真机通过局域网 IP 访问后端
+
+---
+
 ## v2.2.0 — 2026-06-22
 
 ### 🐛 Bug 修复

@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
+import { Repository, LessThan, In } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import { randomUUID } from 'crypto';
 import { CompareRecord } from './entities/compare-record.entity';
@@ -149,7 +149,7 @@ export class NickelHistoryService {
     // 查询关联图片
     const recordIds = records.map((r) => r.id);
     const images = recordIds.length > 0
-      ? await this.imageRepo.find({ where: recordIds.map((id) => ({ recordId: id })) })
+      ? await this.imageRepo.find({ where: { recordId: In(recordIds) } })
       : [];
 
     const imageMap = new Map<string, Map<string, CompareImage>>();

@@ -1,5 +1,37 @@
 # Changelog
 
+## [2.3.2] - 2026-06-26
+
+### 🐛 Bug 修复
+
+- **批号对比只比前缀 → 改为完整数字匹配**：旧逻辑 `26-3-151` 与 `26-3-151J` 判一致（只取`YY-X`前缀），现改为忽略末尾J/t/s后缀后完整比对数字组合
+- **OCR 正则增加中文匹配**：批号(`批号：`)、包号(`包号：`)、日期(`生产日期：`)、净重(`净重(Kg)：`) 四个字段新增中文标签正则，优先匹配中文再降级英文
+- **`normalizeBatchNo` 保留合法后缀**：J/t/s 不做数字纠错（不再误把 J→1），尾缀统一大写
+- **`normalizeDigits` 注释明确**：标注 J/j 不处理，因 J/t/s 是镍板标签合法后缀
+
+### 🔧 代码重构
+
+- **`BarcodeParserService` 全面对齐行业编码规则**：
+  - 旧字段 `month`/`day` → `productCategoryCode`/`productGradeCode`（N4N5产品类别/N6N7产品品级）
+  - 新增 `productionDateCode`（N8-N13原始6位日期码）
+  - 新增 `batchNoSuffixLetter`（J或空，由包号编码区间决定）
+  - `decodePackNo()` 返回 `{ packNo, batchNoSuffixLetter }` 支持包号解码（暂未启用）
+- **`BarcodeParsed` 类型同步更新**：`month`→`productCategoryCode`，`day`→`productGradeCode`，新增 `batchNoSuffixLetter`
+- **`NickelService` 字段映射同步更新**
+- **`RuleCheckerService`** `decodePackNo` 返回值解构适配
+
+### ⏸️ 暂缓
+
+- **包号解码暂不启用**：`decodePackNo()` 方法已实现但注释备用，条码原始值即为包号（`packCode=431` → 包号`431`，暂不`-400=31`）
+- **批号J后缀暂不自动追加**：待包号解码规则正式启用后同步开启
+
+### 🧪 测试
+
+- 条码解析测试重写：24个用例全部通过（含 decodePackNo 边界测试：0/200/201/400/600/801）
+- `validateBatchNoVsBarcode` 交叉验证测试（含J/缺J/错J/正常四种场景）
+
+---
+
 ## [2.3.1] - 2026-06-26
 
 ### ✨ 功能优化

@@ -163,23 +163,27 @@ export class LabelOcrService {
 
     // === 喷码共有字段 ===
 
-    // 批号
-    const batchMatch = allText.match(/BATCH\s*NO\.?\s*[:.]?\s*(\d{2}-\d-\d{3}[J]?)/i)
-      || allText.match(/(\d{2}-\d-\d{3}J?)/);
+    // 批号 — 同时匹配中文 "批号：" 和英文 "BATCH NO."
+    const batchMatch = allText.match(/批号[：:]\s*(\d{2}-\d-\d{3}[JjTtSs]?)/)
+      || allText.match(/BATCH\s*NO\.?\s*[:.]?\s*(\d{2}-\d-\d{3}[J]?)/i)
+      || allText.match(/(\d{2}-\d-\d{3}[JjTtSs]?)/);
     if (batchMatch) result.batchNo = normalizeBatchNo(batchMatch[1]);
 
-    // 包号
-    const packMatch = allText.match(/PACK\s*NO\.?\s*[:.]?\s*(\d{1,3})/i)
+    // 包号 — 同时匹配中文 "包号：" 和英文 "PACK NO."
+    const packMatch = allText.match(/包号[：:]\s*(\d{1,3}[JjTtSs]?)/)
+      || allText.match(/PACK\s*NO\.?\s*[:.]?\s*(\d{1,3})/i)
       || allText.match(/PACK\s*[:.]?\s*(\d{1,3})/i);
     if (packMatch) result.packNo = normalizeDigits(packMatch[1]);
 
-    // 日期
-    const dateMatch = allText.match(/Date\s*[:.]?\s*(\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2})/i)
+    // 日期 — 同时匹配中文 "生产日期：" 和英文 "Date:"
+    const dateMatch = allText.match(/生产日期[：:]\s*(\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2})/)
+      || allText.match(/Date\s*[:.]?\s*(\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2})/i)
       || allText.match(/(\d{4}[-\/.]\d{2}[-\/.]\d{2})/);
     if (dateMatch) result.productionDate = normalizeDate(dateMatch[1]);
 
-    // 净重
-    const netMatch = allText.match(/NET\s*[:.]?\s*([\d,.]+)\s*(?:Kg|KG|kg)?/i)
+    // 净重 — 同时匹配中文 "净重(Kg)：" 和英文 "NET:"
+    const netMatch = allText.match(/净重[（(]Kg[)）][：:/]?\s*([\d,.]+)/)
+      || allText.match(/NET\s*[:.]?\s*([\d,.]+)\s*(?:Kg|KG|kg)?/i)
       || allText.match(/NET\s*[:.]?\s*(\d+)/i);
     if (netMatch) result.netWeight = normalizeWeight(netMatch[1]);
 

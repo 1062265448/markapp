@@ -93,6 +93,7 @@ export class SpraycodeCompareService {
       case 'date': return this._dateMatch(a, b);
       case 'weight': return this._weightMatch(a, b);
       case 'batchNo': return this._batchNoMatch(a, b);
+      case 'ignore': return true; // 预留：包号暂不解码时忽略对比（当前已恢复exact）
       default: return this._exactMatch(a, b);
     }
   }
@@ -133,11 +134,11 @@ export class SpraycodeCompareService {
   }
 
   private _batchNoMatch(a: any, b: any): boolean {
-    const extractPrefix = (s: any): string => {
-      const match = String(s).trim().match(/^(\d{2})-+(\d{1})/);
-      return match ? `${match[1]}-${match[2]}` : String(s).trim();
+    const normalize = (s: any): string => {
+      // 标准化批号：统一连字符，去掉末尾J/t/s后缀，只比数字组合
+      return String(s).trim().replace(/[—–‐]/g, '-').replace(/[JjTtSs]$/, '');
     };
-    return extractPrefix(a) === extractPrefix(b);
+    return normalize(a) === normalize(b);
   }
 
   /**

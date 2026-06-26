@@ -379,7 +379,7 @@ export class RuleCheckerService {
     if (!packNo) {
       return { field: 'packNo', ruleType: 'crossField', passed: false, severity: 'error', original: null, message: '包号未识别' };
     }
-    const expectedPack = this.barcodeParserService.decodePackNo(barcode.packCode);
+    const { packNo: expectedPack, batchNoSuffixLetter } = this.barcodeParserService.decodePackNo(barcode.packCode);
     if (packNo !== expectedPack) {
       return { field: 'packNo', ruleType: 'crossField', passed: false, severity: 'error', original: packNo, corrected: expectedPack, message: `包号与条形码不一致:识别为 "${packNo}"，条形码编码 ${barcode.packCode} 对应 "${expectedPack}"` };
     }

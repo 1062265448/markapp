@@ -48,18 +48,19 @@ export interface OcrMeta {
 // 条形码解析结果
 export interface BarcodeParsed {
   barcode: string;
-  prefix: string;
-  month: string;
-  day: string;
-  productionDateCode: string;
-  productionDate?: string;
-  workshopCode: number;
+  prefix: string;                // N1N2N3: 企业代码
+  productCategoryCode: string;   // N4N5: 产品类别代码
+  productGradeCode: string;      // N6N7: 产品品级代码
+  productionDateCode: string;    // N8-N13: 生产日期代码(原始6位)
+  productionDate?: string;      // 完整日期
+  workshopCode: number;          // ①车间
   workshopName: string;
-  batchNoSuffix: string;
-  packCode: number;
-  expectedPackNo: string;
-  netWeightEncoded: number;
-  expectedNetWeight: number;
+  batchNoSuffix: string;         // ②③④批号后三位数字
+  batchNoSuffixLetter: string;   // J或空(由包号编码区间决定)
+  packCode: number;              // ⑤⑥⑦包号编码
+  expectedPackNo: string;        // 解码后实际包号
+  netWeightEncoded: number;      // N21-N25捆净重代码
+  expectedNetWeight: number;      // 解码后净重(kg)
   parsed: boolean;
   message?: string;
 }

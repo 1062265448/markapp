@@ -22,6 +22,7 @@ export interface OcrTextResult {
 
 /**
  * OCR 字符纠错映射（O→0, o→0, l→1, I→1）
+ * 注意：不处理 J/j→1，因为 J/t/s 是镍板批号/包号的合法后缀
  */
 export function normalizeDigits(str: string): string {
   return str.replace(/[OolI]/g, ch => {
@@ -32,11 +33,15 @@ export function normalizeDigits(str: string): string {
 
 /**
  * 标准化批号格式
+ * 保留合法后缀 J/t/s，仅标准化连字符和数字纠错
  */
 export function normalizeBatchNo(raw: string): string {
   let s = raw.trim();
   s = s.replace(/[—–‐]/g, '-');
+  // 仅对数字部分做纠错，保留尾缀 J/j/T/t/S/s
   s = s.replace(/(\d)/g, (m) => normalizeDigits(m));
+  // 统一尾缀为大写
+  s = s.replace(/([JjTtSs])$/, (m) => m.toUpperCase());
   return s;
 }
 

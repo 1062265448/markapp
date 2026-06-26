@@ -85,12 +85,12 @@ export class SpraycodeOcrService {
       parts = trimmed.split(/\s+/);
     } else if (/^\d{25}$/.test(trimmed)) {
       parts = [
-        trimmed.slice(0, 3),
-        trimmed.slice(3, 5),
-        trimmed.slice(5, 7),
-        trimmed.slice(7, 13),
-        trimmed.slice(13, 20),
-        trimmed.slice(20, 25),
+        trimmed.slice(0, 3),   // 企业代码
+        trimmed.slice(3, 5),   // 产品类别
+        trimmed.slice(5, 7),   // 产品品级
+        trimmed.slice(7, 13),  // 生产日期 YYMMDD
+        trimmed.slice(13, 20), // 生产序号(7位)
+        trimmed.slice(20, 25), // 捆净重
       ];
     } else {
       return null;
@@ -98,26 +98,43 @@ export class SpraycodeOcrService {
 
     if (parts.length !== 6) return null;
 
-    const productCode = parts[4];
+    const productCode = parts[4]; // 7位生产序号: ①车间②③④批号⑤⑥⑦包号
     if (productCode.length !== 7) return null;
 
-    const workshopCode = parseInt(productCode[0], 10);
-    const batchNoSuffix = productCode.slice(1, 4);
-    const packCode = parseInt(productCode.slice(4), 10);
-    const weightCode = parseInt(parts[5], 10);
+    const workshopCode = parseInt(productCode[0], 10); // ①车间
+    const batchNoSuffix = productCode.slice(1, 4);       // ②③④批号后三位数字
+    const packCode = parseInt(productCode.slice(4), 10); // ⑤⑥⑦包号编码
+    const weightCode = parseInt(parts[5], 10);           // 捆净重代码
 
-    // 从日期代码提取日期
+    // 日期来自第4段(YYMMDD)
     const dateCode = parts[3];
     if (dateCode.length !== 6) return null;
     const productionDate = `20${dateCode.slice(0, 2)}-${dateCode.slice(2, 4)}-${dateCode.slice(4, 6)}`;
 
+    // 包号暂不解码（条码原始值即为包号，解码规则待后续启用）
+    // const packResult = this._decodePackNo(packCode);
+    const expectedPackNo = packCode.toString();
+    const batchNoSuffixLetter = ''; // 解码规则未启用，暂不加J后缀
+
     return {
-      batchNo: `${dateCode.slice(0, 2)}-${workshopCode}-${batchNoSuffix}`,
-      packNo: packCode.toString(),
+      batchNo: `${dateCode.slice(0, 2)}-${workshopCode}-${batchNoSuffix}${batchNoSuffixLetter}`,
+      packNo: expectedPackNo,
       productionDate,
       netWeight: weightCode / 10,
     };
   }
+
+  // _decodePackNo 保留备用，待解码规则启用时恢复
+  // /**
+  //  * 包号编码转换（内联版，与 BarcodeParserService.decodePackNo 一致）
+  //  * 0-200 → 正常包号, 201-400 → -200+J, 401-600 → -400+J, 601-800 → -600+J
+  //  */
+  // private _decodePackNo(code: number): { packNo: string; batchNoSuffixLetter: string } {
+  //   if (code <= 200) return { packNo: code.toString(), batchNoSuffixLetter: '' };
+  //   if (code <= 400) return { packNo: (code - 200).toString(), batchNoSuffixLetter: 'J' };
+  //   if (code <= 600) return { packNo: (code - 400).toString(), batchNoSuffixLetter: 'J' };
+  //   return { packNo: (code - 600).toString(), batchNoSuffixLetter: 'J' };
+  // }
 
   /**
    * 从OCR文本行提取喷码字段
@@ -135,22 +152,26 @@ export class SpraycodeOcrService {
     };
 
     // 批号
-    const batchMatch = allText.match(/BATCH\s*NO\.?\s*[:.]?\s*(\d{2}-\d-\d{3}[J]?)/i)
-      || allText.match(/(\d{2}-\d-\d{3}J?)/);
+    const batchMatch = allText.match(/批号[：:]\s*(\d{2}-\d-\d{3}[JjTtSs]?)/)
+      || allText.match(/BATCH\s*NO\.?\s*[:.]?\s*(\d{2}-\d-\d{3}[J]?)/i)
+      || allText.match(/(\d{2}-\d-\d{3}[JjTtSs]?)/);
     if (batchMatch) result.batchNo = normalizeBatchNo(batchMatch[1]);
 
-    // 包号
-    const packMatch = allText.match(/PACK\s*NO\.?\s*[:.]?\s*(\d{1,3})/i)
+    // 包号 — 同时匹配中文 "包号：" 和英文 "PACK NO."
+    const packMatch = allText.match(/包号[：:]\s*(\d{1,3}[JjTtSs]?)/)
+      || allText.match(/PACK\s*NO\.?\s*[:.]?\s*(\d{1,3})/i)
       || allText.match(/PACK\s*[:.]?\s*(\d{1,3})/i);
     if (packMatch) result.packNo = normalizeDigits(packMatch[1]);
 
-    // 日期
-    const dateMatch = allText.match(/Date\s*[:.]?\s*(\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2})/i)
+    // 日期 — 同时匹配中文 "生产日期：" 和英文 "Date:"
+    const dateMatch = allText.match(/生产日期[：:]\s*(\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2})/)
+      || allText.match(/Date\s*[:.]?\s*(\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2})/i)
       || allText.match(/(\d{4}[-\/.]\d{2}[-\/.]\d{2})/);
     if (dateMatch) result.productionDate = normalizeDate(dateMatch[1]);
 
-    // 净重
-    const netMatch = allText.match(/NET\s*[:.]?\s*([\d,.]+)\s*(?:Kg|KG|kg)?/i)
+    // 净重 — 同时匹配中文 "净重(Kg)：" 和英文 "NET:"
+    const netMatch = allText.match(/净重[（(]Kg[)）][：:/]?\s*([\d,.]+)/)
+      || allText.match(/NET\s*[:.]?\s*([\d,.]+)\s*(?:Kg|KG|kg)?/i)
       || allText.match(/NET\s*[:.]?\s*(\d+)/i);
     if (netMatch) result.netWeight = normalizeWeight(netMatch[1]);
 

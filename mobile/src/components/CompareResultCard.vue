@@ -30,40 +30,93 @@
           v-for="(item, i) in compareResults"
           :key="i"
           class="compare-row"
-          :class="{ match: item.matched, mismatch: !item.matched }"
+          :class="rowClass(item)"
           :style="i < 8 ? { animationDelay: `${i * 0.04}s` } : {}"
         >
-          <div class="compare-status" :class="item.matched ? 'match' : 'mismatch'">
-            <svg v-if="item.matched" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <div class="compare-status" :class="statusClass(item)">
+            <svg v-if="item.matched === true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20 6L9 17l-5-5"/>
             </svg>
-            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <svg v-else-if="item.matched === false" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/>
               <line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
+            <span v-else class="status-dash">—</span>
           </div>
           <div class="compare-content">
-            <span class="compare-field">{{ item.field }}</span>
-            <div class="compare-values">
-              <span class="val-spray">{{ item.sprayCodeValue ?? '-' }}</span>
-              <span class="val-divider">/</span>
-              <span class="val-label">{{ item.labelValue ?? '-' }}</span>
+            <div class="compare-field-row">
+              <span class="compare-field">{{ item.fieldLabelCn }}</span>
+              <span class="compare-field-en">{{ item.fieldLabelEn }}</span>
             </div>
-            <span class="compare-msg" v-if="item.diffType">{{ item.diffType }}</span>
+
+            <!-- 匹配 / 不匹配 → 分喷码标签两侧显示 -->
+            <div v-if="item.matched === true || item.matched === false" class="compare-sides">
+              <div class="compare-side">
+                <span class="side-label">喷码</span>
+                <span class="side-value" :class="{ 'val-err': item.matched === false }">{{ item.sprayCodeValue ?? '-' }}</span>
+              </div>
+              <span class="side-sep">{{ item.matched === true ? '=' : '≠' }}</span>
+              <div class="compare-side">
+                <span class="side-label">标签</span>
+                <span class="side-value" :class="{ 'val-err': item.matched === false }">
+                  {{ item.labelValueCn ?? '-' }}
+                  <template v-if="item.labelValueEn && item.labelValueEn !== item.labelValueCn"> / {{ item.labelValueEn }}</template>
+                </span>
+              </div>
+            </div>
+
+            <!-- 双方缺失 -->
+            <div v-else-if="item.diffType === 'both-missing'" class="compare-missing">
+              <span class="missing-text">均未识别</span>
+            </div>
+
+            <!-- 单方缺失 -->
+            <div v-else class="compare-sides">
+              <div class="compare-side">
+                <span class="side-label">喷码</span>
+                <span class="side-value" :class="{ 'val-missing': item.missingIn === 'spraycode' }">
+                  {{ item.missingIn === 'spraycode' ? '未识别' : (item.sprayCodeValue ?? '-') }}
+                </span>
+              </div>
+              <span class="side-sep">/</span>
+              <div class="compare-side">
+                <span class="side-label">标签</span>
+                <span class="side-value" :class="{ 'val-missing': item.missingIn === 'label' }">
+                  <template v-if="item.missingIn === 'label'">未识别</template>
+                  <template v-else>
+                    {{ item.labelValueCn ?? '-' }}
+                    <template v-if="item.labelValueEn && item.labelValueEn !== item.labelValueCn"> / {{ item.labelValueEn }}</template>
+                  </template>
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Spraycode Data -->
-    <div class="spray-section" v-if="sprayData">
+    <div class="detail-section" v-if="sprayData">
       <div class="section-header">
-        <span class="section-title">喷码识别数据</span>
+        <span class="section-title">喷码识别结果</span>
       </div>
       <div class="field-list">
         <div class="field-row" v-for="(val, key) in sprayDisplay" :key="key">
-          <span class="field-label">{{ key }}</span>
-          <span class="field-value">{{ val ?? '-' }}</span>
+          <span class="field-label">{{ fieldLabels[key as string] || key }}</span>
+          <span class="field-value" :class="{ 'val-empty': !val }">{{ val ?? '-' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Label Data -->
+    <div class="detail-section" v-if="labelData && hasLabelData">
+      <div class="section-header">
+        <span class="section-title">标签识别结果</span>
+      </div>
+      <div class="field-list">
+        <div class="field-row" v-for="(val, key) in labelDisplay" :key="key">
+          <span class="field-label">{{ fieldLabels[key as string] || key }}</span>
+          <span class="field-value" :class="{ 'val-empty': !val }">{{ val ?? '-' }}</span>
         </div>
       </div>
     </div>
@@ -72,7 +125,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { CompareResult } from '@/types'
+import type { CompareResult, CompareResultItem } from '@/types'
 
 const props = defineProps<{ result: CompareResult }>()
 
@@ -80,18 +133,57 @@ const compareResults = computed(() => props.result?.data?.compareResults || [])
 const summary = computed(() => props.result?.data?.summary || null)
 const overallMatch = computed(() => summary.value?.overallMatch ?? false)
 const sprayData = computed(() => props.result?.data?.sprayCodeData || null)
+const labelData = computed(() => props.result?.data?.labelCodeData || null)
+
+const fieldLabels: Record<string, string> = {
+  batchNo: '批号 / BATCH NO.',
+  packNo: '包号 / PACK NO.',
+  productionDate: '日期 / DATE',
+  netWeight: '净重 / NET',
+  grossWeight: '毛重 / GROSS',
+  pieces: '块数 / PCS',
+}
 
 const sprayDisplay = computed(() => {
   if (!sprayData.value) return {}
   return {
-    '批号': sprayData.value.batchNo,
-    '包号': sprayData.value.packNo,
-    '生产日期': sprayData.value.productionDate,
-    '净重': sprayData.value.netWeight,
-    '毛重': sprayData.value.grossWeight,
-    '块数': sprayData.value.pieces,
+    batchNo: sprayData.value.batchNo,
+    packNo: sprayData.value.packNo,
+    productionDate: sprayData.value.productionDate,
+    netWeight: sprayData.value.netWeight,
+    grossWeight: sprayData.value.grossWeight,
+    pieces: sprayData.value.pieces,
   }
 })
+
+const labelDisplay = computed(() => {
+  if (!labelData.value) return {}
+  const d = labelData.value
+  return {
+    batchNo: d.batchNo?.cn ?? null,
+    packNo: d.packNo?.cn ?? null,
+    productionDate: d.productionDate?.cn ?? null,
+    netWeight: d.netWeight?.cn ?? null,
+  }
+})
+
+const hasLabelData = computed(() => {
+  const d = labelDisplay.value
+  return Object.values(d).some(v => v !== null && v !== undefined && v !== '')
+})
+
+const rowClass = (item: CompareResultItem) => {
+  if (item.matched === true) return 'match'
+  if (item.matched === false) return 'mismatch'
+  if (item.diffType === 'both-missing') return 'both-missing'
+  return 'missing'
+}
+
+const statusClass = (item: CompareResultItem) => {
+  if (item.matched === true) return 'match'
+  if (item.matched === false) return 'mismatch'
+  return 'neutral'
+}
 </script>
 
 <style scoped>
@@ -102,6 +194,7 @@ const sprayDisplay = computed(() => {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* Summary Banner */
 .summary-banner {
   display: flex;
   align-items: center;
@@ -116,10 +209,7 @@ const sprayDisplay = computed(() => {
   transition: all var(--duration-micro) var(--ease-out);
 }
 
-.summary-banner:active {
-  transform: scale(0.985);
-}
-
+.summary-banner:active { transform: scale(0.985); }
 .summary-banner.passed { background: var(--green-soft); color: var(--green); border-color: var(--green-border); }
 .summary-banner.failed { background: var(--red-soft); color: var(--red); border-color: var(--red-border); }
 
@@ -140,7 +230,7 @@ const sprayDisplay = computed(() => {
 .summary-text { font-size: var(--text-title-2); font-weight: 700; }
 .summary-rate { font-size: var(--text-footnote); font-weight: 500; opacity: 0.8; font-family: var(--font-mono); }
 
-/* Section */
+/* Section Header */
 .section-header {
   display: flex;
   align-items: center;
@@ -153,7 +243,8 @@ const sprayDisplay = computed(() => {
 .section-title { font-size: var(--text-footnote); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary); }
 .section-count { font-size: var(--text-caption-2); color: var(--text-tertiary); font-weight: 500; }
 
-.compare-section, .spray-section {
+/* Compare Section */
+.compare-section, .detail-section {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -183,7 +274,10 @@ const sprayDisplay = computed(() => {
 .compare-row:active { background: var(--surface-pressed); }
 .compare-row.mismatch { background: var(--red-soft); }
 .compare-row.mismatch:active { background: rgba(255, 59, 48, 0.15); }
+.compare-row.missing { background: var(--orange-soft, rgba(255, 149, 0, 0.06)); }
+.compare-row.both-missing { background: var(--bg-secondary); }
 
+/* Status Icon */
 .compare-status {
   width: 28px;
   height: 28px;
@@ -197,23 +291,35 @@ const sprayDisplay = computed(() => {
 }
 
 .compare-status:active { transform: scale(0.9); }
-
 .compare-status.match { background: var(--green-soft); color: var(--green); border: 1px solid var(--green-border); }
 .compare-status.mismatch { background: var(--red-soft); color: var(--red); border: 1px solid var(--red-border); }
+.compare-status.neutral { background: var(--bg-secondary); color: var(--text-tertiary); border: 1px solid var(--border); }
 
+.status-dash { font-size: 14px; color: var(--text-quaternary); }
+
+/* Compare Content */
 .compare-content { flex: 1; min-width: 0; }
-.compare-field { font-size: var(--text-caption-2); color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; display: block; }
 
-.compare-values { display: flex; align-items: center; gap: var(--space-2); margin-top: 4px; flex-wrap: wrap; }
+.compare-field-row { display: flex; align-items: baseline; gap: var(--space-2); }
+.compare-field { font-size: var(--text-footnote); color: var(--text-secondary); font-weight: 600; }
+.compare-field-en { font-size: var(--text-caption-2); color: var(--text-tertiary); font-weight: 500; letter-spacing: 0.03em; }
 
-.val-spray, .val-label { font-size: var(--text-subhead); font-family: var(--font-mono); font-weight: 500; }
-.val-spray { color: var(--text); }
-.val-label { color: var(--text-tertiary); }
-.val-divider { color: var(--text-quaternary); font-size: var(--text-footnote); }
+/* Two-side comparison */
+.compare-sides { display: flex; align-items: center; gap: var(--space-2); margin-top: 6px; flex-wrap: wrap; }
 
-.compare-msg { font-size: var(--text-caption-2); color: var(--text-tertiary); margin-top: 3px; display: block; }
+.compare-side { display: flex; flex-direction: column; gap: 1px; }
+.side-label { font-size: 10px; color: var(--text-quaternary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
+.side-value { font-size: var(--text-subhead); font-family: var(--font-mono); font-weight: 500; color: var(--text); }
+.side-value.val-err { color: var(--red); font-weight: 600; }
+.side-value.val-missing { color: var(--text-tertiary); font-style: italic; font-family: inherit; }
 
-/* Spray data field list */
+.side-sep { font-size: var(--text-footnote); color: var(--text-quaternary); font-weight: 500; margin: 0 2px; }
+
+/* Missing states */
+.compare-missing { margin-top: 6px; }
+.missing-text { font-size: var(--text-caption-1); color: var(--text-tertiary); font-style: italic; }
+
+/* Detail field list */
 .field-list { display: flex; flex-direction: column; }
 .field-row {
   display: flex;
@@ -228,4 +334,5 @@ const sprayDisplay = computed(() => {
 
 .field-label { font-size: var(--text-footnote); color: var(--text-secondary); font-weight: 500; }
 .field-value { font-size: var(--text-subhead); font-weight: 500; font-family: var(--font-mono); letter-spacing: 0.02em; }
+.field-value.val-empty { color: var(--text-quaternary); font-family: inherit; }
 </style>

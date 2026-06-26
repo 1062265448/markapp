@@ -251,7 +251,7 @@ export class NickelService {
 
     return {
       success: true,
-      data: { compareResults, summary, sprayCodeData },
+      data: { compareResults, summary, sprayCodeData, labelCodeData: labelData },
       message: '喷码对比完成',
       timestamp: new Date().toISOString(),
     };

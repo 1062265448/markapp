@@ -116,6 +116,13 @@ export interface CompareSummary {
   overallMatch: boolean
 }
 
+export interface CompareLabelData {
+  batchNo: { cn: string | null; en: string | null } | null
+  packNo: { cn: string | null; en: string | null } | null
+  netWeight: { cn: string | number | null; en: string | number | null } | null
+  productionDate: { cn: string | null; en: string | null } | null
+}
+
 export interface CompareResult {
   success: boolean
   data: {
@@ -131,6 +138,7 @@ export interface CompareResult {
       pieces: number | null
       _ocrMeta?: OcrMeta
     }
+    labelCodeData?: CompareLabelData | null
   }
   message: string
   timestamp: string

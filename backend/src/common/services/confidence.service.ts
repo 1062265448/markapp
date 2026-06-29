@@ -108,7 +108,7 @@ export class ConfidenceService {
     const netWeight = rawData.netWeight;
     const encodedWeight = barcodeParsed.expectedNetWeight;
     if (netWeight !== null && encodedWeight !== null) {
-      const diff = Math.abs(parseFloat(String(netWeight)) - parseFloat(String(encodedWeight)));
+      const diff = Math.abs(parseInt(String(netWeight), 10) - parseInt(String(encodedWeight), 10));
       if (diff > 10) {
         conflicts.push({ field: 'netWeight', aiValue: netWeight, barcodeValue: `${encodedWeight}kg` });
       }

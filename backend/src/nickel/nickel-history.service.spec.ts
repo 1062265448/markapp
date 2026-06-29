@@ -68,11 +68,12 @@ describe('NickelHistoryService', () => {
       const result = {
         success: true,
         data: {
-          compareResults: [{ field: 'packNo', matched: true }],
-          summary: { overallMatch: true, matched: 3, totalFields: 4 },
-          sprayCodeData: { batchNo: '26-1-001J', packNo: '1', productionDate: '2026-06-15' },
+          compareResults: [{ field: 'packNo', fieldLabelCn: '包号', fieldLabelEn: 'PACK NO.', sprayCodeValue: '1', labelValueCn: '1', labelValueEn: '1', labelValue: '1', matched: true, missingIn: null, diffType: null }],
+          summary: { totalFields: 4, matched: 3, mismatched: 0, missingInSpraycode: 0, missingInLabel: 1, bothMissing: 0, overallMatch: true },
+          sprayCodeData: { batchNo: '26-1-001J', packNo: '1', productionDate: '2026-06-15', netWeight: 1500, grossWeight: 1520, pieces: 50 },
         },
         message: '喷码对比完成',
+        timestamp: new Date().toISOString(),
       };
 
       const sprayFile = {
@@ -106,10 +107,11 @@ describe('NickelHistoryService', () => {
         success: true,
         data: {
           compareResults: [],
-          summary: { overallMatch: null, matched: 0, totalFields: 4 },
-          sprayCodeData: { batchNo: null, packNo: null },
+          summary: { totalFields: 4, matched: 0, mismatched: 0, missingInSpraycode: 0, missingInLabel: 4, bothMissing: 0, overallMatch: false },
+          sprayCodeData: { batchNo: null, packNo: null, productionDate: null, netWeight: null, grossWeight: null, pieces: null },
         },
         message: '喷码对比完成',
+        timestamp: new Date().toISOString(),
       };
 
       mockRecordRepo.create.mockReturnValue({ id: 'test-uuid' });
@@ -127,10 +129,11 @@ describe('NickelHistoryService', () => {
         success: true,
         data: {
           compareResults: [],
-          summary: { overallMatch: true, matched: 4, totalFields: 4 },
-          sprayCodeData: { batchNo: '26-1-001J', packNo: '1', productionDate: '2026-06-15' },
+          summary: { totalFields: 4, matched: 4, mismatched: 0, missingInSpraycode: 0, missingInLabel: 0, bothMissing: 0, overallMatch: true },
+          sprayCodeData: { batchNo: '26-1-001J', packNo: '1', productionDate: '2026-06-15', netWeight: 1500, grossWeight: 1520, pieces: 50 },
         },
         message: '喷码对比完成',
+        timestamp: new Date().toISOString(),
       };
 
       mockRecordRepo.create.mockImplementation((data) => data);

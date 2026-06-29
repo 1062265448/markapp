@@ -3,7 +3,7 @@
     <!-- Header -->
     <header class="header fade-up">
       <h1 class="large-title">标签识别</h1>
-      <p class="header-desc">拍照识别镍板标签，AI三模型投票校验</p>
+      <p class="header-desc">拍照识别镍板标签，OCR + 条码扫描校验</p>
     </header>
 
     <!-- Image Input -->
@@ -51,16 +51,6 @@
           <label class="option-label">条形码</label>
           <input class="input barcode-input" v-model="barcode" placeholder="手动输入（可选）" />
         </div>
-        <div class="option-divider"></div>
-        <div class="option-row toggle-row">
-          <label class="option-label">启用GLM模型</label>
-          <button class="toggle" :class="{ active: enableGLM }" @click="enableGLM = !enableGLM">
-            <span class="toggle-track">
-              <span class="toggle-thumb"></span>
-            </span>
-            <span class="toggle-text">{{ enableGLM ? '开启' : '关闭' }}</span>
-          </button>
-        </div>
       </div>
     </section>
 
@@ -95,7 +85,6 @@ const historyStore = useHistoryStore()
 const imageBlob = ref<Blob | null>(null)
 const previewUrl = ref<string | null>(null)
 const barcode = ref('')
-const enableGLM = ref(true)
 const loading = ref(false)
 const cameraLoading = ref(false)
 const result = ref<RecognitionResult | null>(null)
@@ -159,7 +148,6 @@ const doRecognize = async () => {
     const res = await recognizeLabel(
       imageBlob.value,
       barcode.value || undefined,
-      enableGLM.value,
     )
     result.value = res
 
@@ -403,63 +391,6 @@ const doRecognize = async () => {
   text-align: right;
   padding: 0 var(--space-3);
   border-radius: var(--radius-xs);
-}
-
-.toggle-row {
-  padding: var(--space-3) 0;
-}
-
-.toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  font-family: inherit;
-}
-
-.toggle-track {
-  width: 44px;
-  height: 26px;
-  border-radius: 13px;
-  background: var(--bg-tertiary);
-  position: relative;
-  transition: background var(--duration-micro) var(--ease-out);
-  flex-shrink: 0;
-}
-
-.toggle.active .toggle-track {
-  background: var(--accent);
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--surface);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-  transition: transform var(--duration-micro) var(--ease-out);
-}
-
-.toggle.active .toggle-thumb {
-  transform: translateX(18px);
-}
-
-.toggle-text {
-  font-size: var(--text-footnote);
-  font-weight: 500;
-  color: var(--text-tertiary);
-  min-width: 28px;
-  text-align: right;
-}
-
-.toggle.active .toggle-text {
-  color: var(--accent);
 }
 
 /* Action section */

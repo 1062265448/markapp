@@ -7,6 +7,7 @@ import { CompareRecord } from './entities/compare-record.entity';
 import { CompareImage } from './entities/compare-image.entity';
 import { ImageStorageService } from '../common/services/image-storage.service';
 import { NickelConfigService } from '../config/config.service';
+import { CompareResultResponse } from './types/nickel.types';
 
 export interface HistoryItem {
   id: string;
@@ -46,7 +47,7 @@ export class NickelHistoryService {
    * 保存对比记录和图片
    */
   async saveCompareRecord(
-    result: any,
+    result: CompareResultResponse,
     sprayFile?: { buffer: Buffer; mimetype: string; size: number; originalname?: string },
     labelFile?: { buffer: Buffer; mimetype: string; size: number; originalname?: string },
   ): Promise<string> {

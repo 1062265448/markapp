@@ -1,6 +1,6 @@
 # MarkApp — 镍板标签识别 APP
 
-基于 AI 三模型投票的镍板标签智能识别系统，支持标签识别、喷码 OCR、喷码对比等功能。
+基于本地 OCR + 条码扫描的镍板标签智能识别系统，支持标签识别、喷码 OCR、喷码对比等功能。
 
 ## 架构
 
@@ -8,7 +8,7 @@
 markapp/
 ├── backend/          # NestJS 后端 API
 │   └── src/
-│       ├── common/         # 公共服务（AI 调用、条码解析、规则校验等）
+│       ├── common/         # 公共服务（OCR 调用、条码解析、规则校验等）
 │       ├── config/         # 配置模块
 │       └── nickel/         # 镍标识别业务模块
 │
@@ -23,8 +23,8 @@ markapp/
 
 ## 核心功能
 
-- **标签识别**：三模型并行识别（火山引擎 Doubao、阿里 Qwen、智谱 GLM），投票合并结果
-- **喷码 OCR**：基于 RapidOCR + Qwen VL 的喷码文字识别
+- **标签识别**：本地 RapidOCR 文本识别 + zxing-cpp 条码扫描，规则校验 + 自动纠错
+- **喷码 OCR**：基于 RapidOCR + zxing-cpp 的喷码文字识别
 - **喷码对比**：喷码与标签信息一致性校验
 - **规则校验**：批号、包号、日期、重量等字段的格式/范围/交叉校验
 - **自动纠错**：OCR 常见字符混淆自动纠正（O→0、l→1 等）
@@ -65,10 +65,14 @@ npm run cap:build       # 构建并同步到 Android
 | `PORT` | 服务端口 | 否（默认 3003） |
 | `API_KEY` | API 认证密钥 | 否 |
 | `API_KEY_ENABLED` | 是否启用 API Key 认证 | 否 |
-| `QWEN_API_KEY` | 阿里 Qwen API Key | 是 |
-| `VOLC_API_KEY` | 火山引擎 API Key | 是 |
-| `GLM_API_KEY` | 智谱 GLM API Key | 否（可选） |
 | `RAPID_OCR_URL` | RapidOCR 服务地址 | 是 |
+| `MYSQL_HOST` | MySQL 主机 | 是 |
+| `MYSQL_PORT` | MySQL 端口 | 否（默认 3306） |
+| `MYSQL_USERNAME` | MySQL 用户名 | 是 |
+| `MYSQL_PASSWORD` | MySQL 密码 | 是 |
+| `MYSQL_DATABASE` | MySQL 数据库名 | 否（默认 markapp） |
+| `IMAGE_UPLOAD_DIR` | 图片上传目录 | 否（默认 uploads） |
+| `IMAGE_RETENTION_DAYS` | 图片保留天数 | 否（默认 10） |
 
 移动端原生 API 地址通过 `VITE_NATIVE_API_URL` 环境变量配置。
 
@@ -92,7 +96,6 @@ npm run test:cov        # 运行测试并生成覆盖率报告
 
 ## 技术栈
 
-- **后端**：NestJS 11、TypeScript、Axios
+- **后端**：NestJS 11、TypeScript、TypeORM + MySQL、Axios
 - **前端**：Vue 3、Pinia、Vue Router、Capacitor 8
-- **AI**：火山引擎 Doubao Vision、阿里 Qwen VL、智谱 GLM-4V
-- **OCR**：RapidOCR、Qwen VL OCR
+- **OCR**：RapidOCR（自部署 HTTP 服务）、zxing-cpp 条码扫描

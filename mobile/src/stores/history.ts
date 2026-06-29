@@ -136,7 +136,9 @@ export const useHistoryStore = defineStore('history', () => {
     for (const id of ids) {
       try {
         await deleteHistoryRecord(id)
-      } catch { /* ignore */ }
+      } catch (e: unknown) {
+        console.warn('[History] 删除记录失败:', id, e instanceof Error ? e.message : e)
+      }
     }
     records.value = []
     total.value = 0

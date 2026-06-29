@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { NickelConfigService } from '../../config/config.service';
 import { OcrMeta } from '../../nickel/types/nickel.types';
+import { BarcodeParserService } from './barcode-parser.service';
 import {
   callOcrFull,
   normalizeDigits,
@@ -24,7 +25,10 @@ interface SpraycodeFields {
 export class SpraycodeOcrService {
   private rapidOcrUrl: string;
 
-  constructor(private config: NickelConfigService) {
+  constructor(
+    private config: NickelConfigService,
+    private barcodeParser: BarcodeParserService,
+  ) {
     this.rapidOcrUrl = this.config.rapidOcrUrl;
   }
 
@@ -49,13 +53,16 @@ export class SpraycodeOcrService {
     if (barcodes.length > 0) {
       const bestBarcode = pickBestBarcode(barcodes);
       if (bestBarcode) {
-        const parsed = this._tryParseBarcode(bestBarcode);
-        if (parsed) {
+        const parsed = this.barcodeParser.parse(bestBarcode);
+        if (parsed && parsed.parsed) {
           // 条码结果作为补充（OCR 文本提取优先）
-          if (!fields.batchNo && parsed.batchNo) fields.batchNo = parsed.batchNo;
-          if (!fields.packNo && parsed.packNo) fields.packNo = parsed.packNo;
+          if (!fields.batchNo) {
+            const yearShort = parsed.productionDate ? parsed.productionDate.slice(2, 4) : '';
+            fields.batchNo = `${yearShort}-${parsed.workshopCode}-${parsed.batchNoSuffix}`;
+          }
+          if (!fields.packNo) fields.packNo = parsed.expectedPackNo;
           if (!fields.productionDate && parsed.productionDate) fields.productionDate = parsed.productionDate;
-          if (!fields.netWeight && parsed.netWeight !== null) fields.netWeight = parsed.netWeight;
+          if (!fields.netWeight && parsed.expectedNetWeight) fields.netWeight = parsed.expectedNetWeight;
         }
       }
     }
@@ -73,68 +80,6 @@ export class SpraycodeOcrService {
     console.log('[SpraycodeOCR] 字段提取完成，耗时:', latency, 'ms');
     return fields;
   }
-
-  /**
-   * 尝试解析条码字符串为喷码字段
-   */
-  private _tryParseBarcode(barcode: string): { batchNo: string | null; packNo: string | null; productionDate: string | null; netWeight: number | null } | null {
-    const trimmed = barcode.trim();
-    let parts: string[];
-
-    if (trimmed.includes(' ')) {
-      parts = trimmed.split(/\s+/);
-    } else if (/^\d{25}$/.test(trimmed)) {
-      parts = [
-        trimmed.slice(0, 3),   // 企业代码
-        trimmed.slice(3, 5),   // 产品类别
-        trimmed.slice(5, 7),   // 产品品级
-        trimmed.slice(7, 13),  // 生产日期 YYMMDD
-        trimmed.slice(13, 20), // 生产序号(7位)
-        trimmed.slice(20, 25), // 捆净重
-      ];
-    } else {
-      return null;
-    }
-
-    if (parts.length !== 6) return null;
-
-    const productCode = parts[4]; // 7位生产序号: ①车间②③④批号⑤⑥⑦包号
-    if (productCode.length !== 7) return null;
-
-    const workshopCode = parseInt(productCode[0], 10); // ①车间
-    const batchNoSuffix = productCode.slice(1, 4);       // ②③④批号后三位数字
-    const packCode = parseInt(productCode.slice(4), 10); // ⑤⑥⑦包号编码
-    const weightCode = parseInt(parts[5], 10);           // 捆净重代码
-
-    // 日期来自第4段(YYMMDD)
-    const dateCode = parts[3];
-    if (dateCode.length !== 6) return null;
-    const productionDate = `20${dateCode.slice(0, 2)}-${dateCode.slice(2, 4)}-${dateCode.slice(4, 6)}`;
-
-    // 包号暂不解码（条码原始值即为包号，解码规则待后续启用）
-    // const packResult = this._decodePackNo(packCode);
-    const expectedPackNo = packCode.toString();
-    const batchNoSuffixLetter = ''; // 解码规则未启用，暂不加J后缀
-
-    return {
-      batchNo: `${dateCode.slice(0, 2)}-${workshopCode}-${batchNoSuffix}${batchNoSuffixLetter}`,
-      packNo: expectedPackNo,
-      productionDate,
-      netWeight: weightCode / 10,
-    };
-  }
-
-  // _decodePackNo 保留备用，待解码规则启用时恢复
-  // /**
-  //  * 包号编码转换（内联版，与 BarcodeParserService.decodePackNo 一致）
-  //  * 0-200 → 正常包号, 201-400 → -200+J, 401-600 → -400+J, 601-800 → -600+J
-  //  */
-  // private _decodePackNo(code: number): { packNo: string; batchNoSuffixLetter: string } {
-  //   if (code <= 200) return { packNo: code.toString(), batchNoSuffixLetter: '' };
-  //   if (code <= 400) return { packNo: (code - 200).toString(), batchNoSuffixLetter: 'J' };
-  //   if (code <= 600) return { packNo: (code - 400).toString(), batchNoSuffixLetter: 'J' };
-  //   return { packNo: (code - 600).toString(), batchNoSuffixLetter: 'J' };
-  // }
 
   /**
    * 从OCR文本行提取喷码字段

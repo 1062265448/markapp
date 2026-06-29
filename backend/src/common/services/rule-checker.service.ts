@@ -24,7 +24,6 @@ export class RuleCheckerService {
     results.push(this.checkEnglishCase(data.brand));
     results.push(this.checkSymbolHalfFullWidth(data.brand, data.standard));
     results.push(this.checkAddressFormat(data.address));
-    results.push(...this.checkFieldLabelCase(data));
 
     // 条形码交叉验证
     if (barcode) {
@@ -302,58 +301,6 @@ export class RuleCheckerService {
     }
 
     return { field: 'symbol', ruleType: 'format', passed: true, severity: 'info', message: '符号格式正确' };
-  }
-
-  /**
-   * 英文标识大小写/标点纠错校验
-   * 标签上印的英文字段名（如 BATCH NO、PACK NO、NET、GROSS 等）
-   * AI可能识别出带小写或标点差异的变体（如 "No." "Pack No" "net"）
-   * 此规则校验这些差异并报告
-   */
-  checkFieldLabelCase(data: NickelLabelData): CheckResult[] {
-    const results: CheckResult[] = [];
-
-    const labelChecks: Array<{ field: string; fieldLabel: string; variants: RegExp[] }> = [
-      { field: 'batchNo', fieldLabel: 'BATCH NO', variants: [/batch\s*no\.?/i, /\u6279\u53F7\s*[\uFF08(]\s*batch\s*no\.?\s*[\uFF09)]/i] },
-      { field: 'packNo', fieldLabel: 'PACK NO', variants: [/pack\s*no\.?/i, /\u5305\u53F7\s*[\uFF08(]\s*pack\s*no\.?\s*[\uFF09)]/i] },
-      { field: 'netWeight', fieldLabel: 'NET', variants: [/net\s*wt\.?/i, /\u51C0\u91CD\s*[\uFF08(]\s*net\s*wt\.?\s*[\uFF09)]/i] },
-      { field: 'grossWeight', fieldLabel: 'GROSS', variants: [/gross\s*wt\.?/i, /\u6BDB\u91CD\s*[\uFF08(]\s*gross\s*wt\.?\s*[\uFF09)]/i] },
-      { field: 'pieces', fieldLabel: 'PIECES', variants: [/piece/i] },
-      { field: 'productionDate', fieldLabel: 'DATE', variants: [] },
-      { field: 'weightBy', fieldLabel: 'WEIGHT BY', variants: [/weight\s*by/i] },
-      { field: 'brand', fieldLabel: 'BRAND', variants: [/brand/i] },
-      { field: 'standard', fieldLabel: 'STANDARD', variants: [/standard/i] },
-    ];
-
-    const fieldLabels = data._fieldLabels || null;
-
-    if (fieldLabels && typeof fieldLabels === 'object') {
-      for (const check of labelChecks) {
-        const aiLabel = (fieldLabels as Record<string, string>)[check.field];
-        if (!aiLabel) continue;
-
-        const normalizedAi = aiLabel.trim().toUpperCase();
-        const normalizedStd = check.fieldLabel;
-
-        if (normalizedAi !== normalizedStd) {
-          const hasDot = aiLabel.includes('.') || aiLabel.includes('\u3002');
-          const hasLowerCase = aiLabel !== aiLabel.toUpperCase();
-          let detail = '';
-          if (hasDot && hasLowerCase) detail = '\u6807\u70B9+\u5927\u5C0F\u5199\u5DEE\u5F02';
-          else if (hasDot) detail = '\u6807\u70B9\u5DEE\u5F02';
-          else if (hasLowerCase) detail = '\u5927\u5C0F\u5199\u5DEE\u5F02';
-          else detail = '\u683C\u5F0F\u5DEE\u5F02';
-
-          results.push({
-            field: check.field, ruleType: 'labelFormat', passed: false, severity: 'error',
-            original: aiLabel, corrected: check.fieldLabel,
-            message: `英文标识 "${aiLabel}" 与标准 "${check.fieldLabel}" 存在${detail}`,
-          });
-        }
-      }
-    }
-
-    return results;
   }
 
   checkBatchVsBarcode(batchNo: string | null, barcode: any): CheckResult {

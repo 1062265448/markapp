@@ -2,8 +2,9 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import {
   RecognitionResult,
   RecognitionData,
-  NickelLabelData,
   OcrMeta,
+  CompareResultResponse,
+  SpraycodeResultResponse,
 } from './types/nickel.types';
 import { WORKSHOP_MAP } from './types/nickel.types';
 import { ImagePreprocessService } from '../common/services/image-preprocess.service';
@@ -176,7 +177,7 @@ export class NickelService {
   /**
    * 喷码OCR识别
    */
-  async recognizeSpraycode(file: { buffer: Buffer; mimetype: string; size: number }): Promise<any> {
+  async recognizeSpraycode(file: { buffer: Buffer; mimetype: string; size: number }): Promise<SpraycodeResultResponse> {
     if (!file) throw new BadRequestException('请上传图片文件');
     if (!file.buffer || !file.mimetype || file.size === undefined) {
       throw new BadRequestException('无效的文件上传格式');
@@ -205,7 +206,7 @@ export class NickelService {
     sprayFile: { buffer: Buffer; mimetype: string; size: number },
     labelFile?: { buffer: Buffer; mimetype: string; size: number },
     labelResult?: any,
-  ): Promise<any> {
+  ): Promise<CompareResultResponse> {
     // 校验喷码图片
     if (!sprayFile) throw new BadRequestException('请上传喷码图片');
     if (!sprayFile.buffer || !sprayFile.mimetype || sprayFile.size === undefined) {

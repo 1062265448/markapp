@@ -37,7 +37,7 @@ export function normalizeDigits(str: string): string {
  */
 export function normalizeBatchNo(raw: string): string {
   let s = raw.trim();
-  s = s.replace(/[—–‐]/g, '-');
+  s = s.replace(/\p{Pd}/gu, '-');  // 所有 Unicode dash 类字符 → 半角连字符
   // 仅对数字部分做纠错，保留尾缀 J/j/T/t/S/s
   s = s.replace(/(\d)/g, (m) => normalizeDigits(m));
   // 统一尾缀为大写
@@ -101,7 +101,7 @@ export async function callOcrFull(
   const base64 = imageBuffer.toString('base64');
 
   try {
-    const response = await callOcrEndpoint(rapidOcrUrl + '/ocr/full', base64, 15000);
+    const response = await callOcrPost(rapidOcrUrl + '/ocr/full', base64, 15000);
     if (response) {
       const result = response as OcrFullResult;
       if (result.lines && result.lines.length > 0) {
@@ -112,7 +112,7 @@ export async function callOcrFull(
     console.warn('[OCR] /ocr/full 调用失败:', (e as Error).message);
     // 降级到 /ocr/text（仅文本，无条码）
     try {
-      const fallbackResponse = await callOcrTextEndpoint(rapidOcrUrl + '/ocr/text', base64, 10000);
+      const fallbackResponse = await callOcrPost(rapidOcrUrl + '/ocr/text', base64, 10000);
       if (fallbackResponse) {
         const item = fallbackResponse;
         return {
@@ -144,20 +144,7 @@ export async function callOcrFull(
 
 import axios from 'axios';
 
-async function callOcrEndpoint(url: string, base64: string, timeout: number): Promise<any> {
-  const response = await axios.post(
-    url,
-    { images: [`data:image/jpeg;base64,${base64}`] },
-    { timeout },
-  );
-  const result = response.data;
-  if (result?.success && result?.data?.length > 0) {
-    return result.data[0];
-  }
-  return null;
-}
-
-async function callOcrTextEndpoint(url: string, base64: string, timeout: number): Promise<any> {
+async function callOcrPost(url: string, base64: string, timeout: number): Promise<any> {
   const response = await axios.post(
     url,
     { images: [`data:image/jpeg;base64,${base64}`] },

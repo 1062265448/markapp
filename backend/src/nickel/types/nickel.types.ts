@@ -162,6 +162,8 @@ export interface CompareResultResponse {
     compareResults: CompareResultItem[];
     summary: CompareSummary;
     sprayCodeData: SpraycodeResult;
+    labelCodeData?: any;
+    id?: string;
   };
   message: string;
   timestamp: string;

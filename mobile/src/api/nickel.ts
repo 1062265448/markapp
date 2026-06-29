@@ -7,12 +7,10 @@ import type { RecognitionResult, SpraycodeResult, CompareResult, HistoryListResp
 export async function recognizeLabel(
   file: File | Blob,
   barcode?: string,
-  enableGLM: boolean = true,
 ): Promise<RecognitionResult> {
   const formData = new FormData()
   formData.append('file', file)
   if (barcode) formData.append('barcode', barcode)
-  formData.append('enableGLM', enableGLM ? 'true' : 'false')
 
   return request.post<RecognitionResult>('/api/nickel/recognize', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },

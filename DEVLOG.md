@@ -1,5 +1,93 @@
 # MarkApp 开发日志
 
+## v2.3.2 — 2026-06-29
+
+### 🔍 全量代码审查
+
+对项目进行了完整代码审查（backend + mobile），发现 20 个问题，按优先级分三级：
+- 🔴 高优先级 5 个（配置失效、死代码、环境变量不匹配）
+- 🟡 中优先级 7 个（代码重复、类型不安全、残留逻辑）
+- 🟢 低优先级 8 个（精度问题、死代码、类型模糊）
+
+### 🐛 Bug 修复
+
+- **`.env` 限流配置变量名不匹配 — 限流参数静默失效**
+  - `backend/.env` 使用 `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX_REQUESTS`
+  - `config.service.ts` 读取 `RATE_LIMIT_WINDOW` / `RATE_LIMIT_MAX`
+  - 结果：`.env` 中的配置被忽略，限流永远用默认值（60000ms / 30次）
+  - 修复：统一为 `RATE_LIMIT_WINDOW` / `RATE_LIMIT_MAX`
+  - ⚠️ 教训：环境变量名必须与 ConfigService getter 严格一致，改名时要双向同步
+
+- **`normalizeBatchNo` Unicode dash 替换不完整**
+  - 旧正则 `/[—–‐]/g` 只匹配 3 种 dash 字符（em dash、en dash、hyphen）
+  - OCR 可能识别出其他 Unicode dash（如 `‑` U+2011 non-breaking hyphen）
+  - 修复：改用 `\p{Pd}` Unicode 属性转义，匹配所有 dash 类字符
+  - ⚠️ 教训：处理 Unicode 标点时，优先用 `\p{Pd}`/`\p{P}` 等属性类，而非枚举
+
+- **`confidence.service.ts` 重量比较使用 `parseFloat`**
+  - `netWeight` 和 `encodedWeight` 都是整数千克，`parseFloat` 可能引入浮点精度问题
+  - 修复：改为 `parseInt(String(val), 10)`
+
+### 🧹 死代码清理
+
+- **前端 `enableGLM` 参数 — 残留自 AI 模型迁移**
+  - `mobile/src/api/nickel.ts` 的 `recognizeLabel()` 发送 `enableGLM` 参数
+  - 后端 `RecognizeDto` 未定义此字段，`NickelService` 完全不使用
+  - `HomeView.vue` 有 GLM 开关 toggle，但实际无效
+  - 修复：移除 API 参数、toggle 组件、相关 CSS 样式
+  - ⚠️ 教训：移除功能时要前后端联动清理，不能只删后端
+
+- **`checkFieldLabelCase()` 规则永远不执行**
+  - 依赖 `data._fieldLabels` 字段，但 `LabelOcrService.extractLabelFields()` 从未填充
+  - 此方法是 AI 模型时代的遗留（AI 能报告标签上的英文标识文字，本地 OCR 不能）
+  - 修复：移除方法定义 + `check()` 中的调用
+
+- **`json-parser.service.ts` — AI 模型 JSON 解析器**
+  - 为解析 AI 模型返回的 JSON 而设计，项目已完全移除 AI 模型
+  - 仅在自己的 spec 文件中被引用，生产代码无调用
+  - 保留：有测试覆盖且无害，暂不删除
+
+- **`.env` / `README.md` 中 AI 模型引用**
+  - `.env` 残留 `QWEN_API_KEY`、`VOLC_API_KEY`、`GLM_API_KEY` 等配置段
+  - README.md 引用「三模型并行识别」和 AI API Key 环境变量
+  - 修复：`.env` 删除 AI 配置段，README 更新为本地 OCR 描述
+
+### ♻️ 重构
+
+- **消除条码解析逻辑重复（3 处 → 1 处）**
+  - `LabelOcrService.tryParseBarcode()` — 私有方法，只提取 workshopCode
+  - `SpraycodeOcrService._tryParseBarcode()` — 私有方法，完整解析但独立实现
+  - `BarcodeParserService.parse()` — 已有的公共服务，功能最完整
+  - 修复：两个 OCR Service 改为注入 `BarcodeParserService`，删除私有方法
+  - ⚠️ 教训：新功能开发时先搜索已有服务，不要「顺手写一个」
+
+- **`ocr-utils.ts` 合并重复的 HTTP 调用函数**
+  - `callOcrEndpoint()` 和 `callOcrTextEndpoint()` 函数体完全相同
+  - 修复：合并为 `callOcrPost()`
+
+- **`nickel.service.ts` / `nickel-history.service.ts` 类型安全**
+  - `compare()` 和 `recognizeSpraycode()` 返回 `any` → 改为 `CompareResultResponse` / `SpraycodeResultResponse`
+  - `saveCompareRecord(result: any)` → `result: CompareResultResponse`
+  - `CompareResultResponse.data` 缺少 `labelCodeData` 和 `id` 字段 → 补全
+  - 清理未使用的 `NickelLabelData` 导入
+
+- **`history.ts` store `clear()` 静默吞错**
+  - 旧代码 `catch { /* ignore */ }` 完全无日志
+  - 修复：添加 `console.warn` 记录失败的记录 ID
+
+### 📝 文档
+
+- **README.md** — 移除 AI 模型描述，更新为本地 OCR + 条码扫描；环境变量表移除 AI API Key
+- **HomeView.vue** — header 描述从「AI三模型投票校验」改为「OCR + 条码扫描校验」
+
+### ✅ 验证
+
+- TypeScript 编译：0 错误
+- 单元测试：108/108 通过（7 个测试套件）
+- `.env` 变量名与 ConfigService getter 一一对应
+
+---
+
 ## v2.3.1 — 2026-06-26
 
 ### ✨ 功能优化

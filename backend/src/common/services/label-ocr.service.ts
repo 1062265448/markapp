@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { NickelConfigService } from '../../config/config.service';
 import { NickelLabelData, OcrMeta } from '../../nickel/types/nickel.types';
 import { WORKSHOP_MAP } from '../../nickel/types/nickel.types';
+import { BarcodeParserService } from './barcode-parser.service';
 import {
   callOcrFull,
   normalizeDigits,
@@ -21,7 +22,10 @@ export interface LabelOcrResult {
 export class LabelOcrService {
   private rapidOcrUrl: string;
 
-  constructor(private config: NickelConfigService) {
+  constructor(
+    private config: NickelConfigService,
+    private barcodeParser: BarcodeParserService,
+  ) {
     this.rapidOcrUrl = this.config.rapidOcrUrl;
   }
 
@@ -46,8 +50,8 @@ export class LabelOcrService {
 
     // 从条码推导 productName/brand（OCR 未识别时补充）
     if (!labelData.productName && barcode) {
-      const parsed = this.tryParseBarcode(barcode);
-      if (parsed?.workshopCode) {
+      const parsed = this.barcodeParser.parse(barcode);
+      if (parsed?.parsed && parsed?.workshopCode) {
         const workshopName = WORKSHOP_MAP[parsed.workshopCode] || '';
         // 从 "电解一车间-电解镍" 中提取最后一段作为 productName
         const parts = workshopName.split('-');
@@ -75,32 +79,6 @@ export class LabelOcrService {
 
     console.log('[LabelOCR] 标签OCR识别完成，耗时:', totalLatency, 'ms，行数:', lines.length, '条码:', barcodeCount);
     return { labelData, _ocrMeta: ocrMeta };
-  }
-
-  /**
-   * 尝试解析条码字符串（简化版，仅提取 workshopCode）
-   */
-  private tryParseBarcode(barcode: string): { workshopCode: number } | null {
-    const trimmed = barcode.trim();
-    let productCode = '';
-
-    if (trimmed.includes(' ')) {
-      const parts = trimmed.split(/\s+/);
-      if (parts.length === 6 && parts[4].length === 7) {
-        productCode = parts[4];
-      }
-    } else if (/^\d{25}$/.test(trimmed)) {
-      productCode = trimmed.slice(13, 20);
-    }
-
-    if (productCode.length === 7) {
-      const workshopCode = parseInt(productCode[0], 10);
-      if (workshopCode >= 1 && workshopCode <= 7) {
-        return { workshopCode };
-      }
-    }
-
-    return null;
   }
 
   /**

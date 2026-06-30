@@ -1,69 +1,106 @@
 :root {
-  /* ===== iOS System Colors — White Base with Blue Accent ===== */
+  /* ===== iOS 18 System Colors — Modern Vibrant Palette ===== */
   --accent: #007AFF;
-  --accent-soft: rgba(0, 122, 255, 0.08);
-  --accent-hover: #0051D5;
-  --accent-glow: rgba(0, 122, 255, 0.15);
-  --accent-border: rgba(0, 122, 255, 0.25);
+  --accent-2: #5AC8FA;
+  --accent-soft: rgba(0, 122, 255, 0.06);
+  --accent-hover: #0056CC;
+  --accent-glow: rgba(0, 122, 255, 0.12);
+  --accent-border: rgba(0, 122, 255, 0.20);
+  --accent-pressed: #004999;
 
   --green: #34C759;
-  --green-soft: rgba(52, 199, 89, 0.10);
-  --green-border: rgba(52, 199, 89, 0.25);
+  --green-light: #30D158;
+  --green-soft: rgba(52, 199, 89, 0.08);
+  --green-bg: rgba(52, 199, 89, 0.12);
+  --green-border: rgba(52, 199, 89, 0.22);
+
   --amber: #FF9500;
-  --amber-soft: rgba(255, 149, 0, 0.10);
+  --amber-soft: rgba(255, 149, 0, 0.08);
+  --amber-bg: rgba(255, 149, 0, 0.12);
+  --amber-border: rgba(255, 149, 0, 0.22);
+
   --red: #FF3B30;
-  --red-soft: rgba(255, 59, 48, 0.10);
-  --red-border: rgba(255, 59, 48, 0.25);
+  --red-light: #FF453A;
+  --red-soft: rgba(255, 59, 48, 0.08);
+  --red-bg: rgba(255, 59, 48, 0.12);
+  --red-border: rgba(255, 59, 48, 0.22);
+
   --blue: #007AFF;
-  --blue-soft: rgba(0, 122, 255, 0.10);
+  --blue-soft: rgba(0, 122, 255, 0.08);
+  --blue-bg: rgba(0, 122, 255, 0.12);
   --teal: #5AC8FA;
   --indigo: #5856D6;
   --purple: #AF52DE;
   --pink: #FF2D55;
+  --orange: #FF9500;
+  --yellow: #FFCC00;
+  --cyan: #32ADE6;
+  --mint: #00C7BE;
 
-  /* Background & surface — iOS system gray palette */
+  /* ===== Background — Ultra-clean Light Mode ===== */
   --bg: #FFFFFF;
-  --bg-secondary: #F2F2F7;
-  --bg-tertiary: #E5E5EA;
+  --bg-warm: #FAFAFA;
+  --bg-secondary: #F5F5F7;
+  --bg-tertiary: #EBEBED;
   --bg-elevated: #FFFFFF;
+  --bg-glass: rgba(255, 255, 255, 0.80);
+
   --surface: #FFFFFF;
-  --surface-alt: #F2F2F7;
-  --surface-pressed: #E5E5EA;
+  --surface-alt: #F5F5F7;
+  --surface-pressed: #E8E8ED;
+  --surface-hover: rgba(0, 0, 0, 0.03);
 
-  /* Borders — iOS style subtle separators */
-  --border: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.12);
-  --border-hover: rgba(0, 0, 0, 0.18);
-  --separator: rgba(0, 0, 0, 0.06);
+  /* ===== Borders — Hairline iOS separators ===== */
+  --border: rgba(0, 0, 0, 0.06);
+  --border-strong: rgba(0, 0, 0, 0.10);
+  --border-hover: rgba(0, 0, 0, 0.15);
+  --separator: rgba(0, 0, 0, 0.04);
+  --separator-strong: rgba(0, 0, 0, 0.08);
 
-  /* Text hierarchy — iOS system text colors */
-  --text: #000000;
-  --text-secondary: #3C3C43;
+  /* ===== Text — Rich hierarchy with high contrast ===== */
+  --text: #1C1C1E;
+  --text-secondary: #3A3A3C;
   --text-tertiary: #8E8E93;
   --text-quaternary: #C7C7CC;
+  --text-placeholder: #AEAEB2;
   --text-inverse: #FFFFFF;
   --text-link: #007AFF;
 
-  /* ===== Shadows — iOS-style subtle layered shadows ===== */
-  --shadow-sm: 0 0.5px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.03);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.06), 0 8px 32px rgba(0, 0, 0, 0.04);
-  --shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.08), 0 16px 48px rgba(0, 0, 0, 0.06);
-  --shadow-fab: 0 4px 12px rgba(0, 122, 255, 0.25), 0 2px 6px rgba(0, 122, 255, 0.15);
-  --shadow-fab-dark: 0 6px 16px rgba(0, 0, 0, 0.20), 0 2px 6px rgba(0, 0, 0, 0.10);
+  /* ===== Gradients ===== */
+  --gradient-accent: linear-gradient(135deg, #007AFF 0%, #5AC8FA 100%);
+  --gradient-green: linear-gradient(135deg, #34C759 0%, #30D158 100%);
+  --gradient-red: linear-gradient(135deg, #FF3B30 0%, #FF453A 100%);
+  --gradient-amber: linear-gradient(135deg, #FF9500 0%, #FFCC00 100%);
+  --gradient-surface: linear-gradient(180deg, #FFFFFF 0%, #F5F5F7 100%);
+  --gradient-hero: linear-gradient(135deg, rgba(0, 122, 255, 0.06) 0%, rgba(90, 200, 250, 0.04) 100%);
 
-  /* ===== Border Radius — iOS large rounded corners ===== */
-  --radius-xs: 8px;
-  --radius-sm: 12px;
-  --radius: 16px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
+  /* ===== Shadows — Layered iOS-style depth ===== */
+  --shadow-xs: 0 0.5px 1px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.06), 0 4px 8px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 12px 40px rgba(0, 0, 0, 0.08), 0 8px 16px rgba(0, 0, 0, 0.05);
+  --shadow-fab: 0 4px 16px rgba(0, 122, 255, 0.20), 0 2px 8px rgba(0, 122, 255, 0.12);
+  --shadow-inner: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-glow: 0 0 20px rgba(0, 122, 255, 0.15);
+
+  /* ===== Border Radius — Modern large rounded corners ===== */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-2xl: 32px;
   --radius-full: 9999px;
 
-  /* ===== Spacing — 4px grid with iOS feel ===== */
+  /* ===== Spacing — 4px grid refined ===== */
+  --space-0\.5: 2px;
   --space-1: 4px;
+  --space-1\.5: 6px;
   --space-2: 8px;
+  --space-2\.5: 10px;
   --space-3: 12px;
+  --space-3\.5: 14px;
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
@@ -73,87 +110,123 @@
   --space-16: 64px;
 
   /* ===== Layout ===== */
-  --tab-height: 84px;
+  --tab-height: 80px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --page-header-top: calc(var(--safe-top) + 52px);
+  --page-header-top: calc(var(--safe-top) + 48px);
   --content-max-width: 430px;
+  --header-height: 52px;
 
-  /* ===== Typography — iOS San Francisco System ===== */
-  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'SF Mono', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+  /* ===== Typography — iOS 18 San Francisco System ===== */
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro', 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro', 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  --font-mono: 'SF Mono', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'JetBrains Mono', 'Liberation Mono', monospace;
 
-  /* Font sizes — iOS Dynamic Type scale */
-  --text-hero: 34px;
-  --text-large-title: 28px;
-  --text-title-1: 22px;
-  --text-title-2: 17px;
-  --text-title-3: 15px;
+  /* Font sizes — iOS 18 Dynamic Type refined */
+  --text-hero: 36px;
+  --text-large-title: 30px;
+  --text-title-1: 24px;
+  --text-title-2: 18px;
+  --text-title-3: 16px;
   --text-body: 17px;
   --text-callout: 16px;
   --text-subhead: 15px;
   --text-footnote: 13px;
   --text-caption-1: 12px;
   --text-caption-2: 11px;
+  --text-micro: 10px;
 
-  /* ===== Motion — iOS spring physics ===== */
+  /* ===== Motion — iOS spring physics refined ===== */
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-spring-soft: cubic-bezier(0.25, 1.5, 0.5, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-in: cubic-bezier(0.42, 0, 1, 1);
-  --duration-instant: 80ms;
-  --duration-fast: 150ms;
-  --duration-micro: 200ms;
-  --duration-normal: 300ms;
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --ease-smooth: cubic-bezier(0.45, 0.05, 0.55, 0.95);
+
+  --duration-instant: 60ms;
+  --duration-fast: 120ms;
+  --duration-micro: 180ms;
+  --duration-normal: 280ms;
   --duration-slow: 400ms;
   --duration-spring: 500ms;
+  --duration-dramatic: 700ms;
 }
 
-/* ===== Dark Mode — iOS Dark Appearance ===== */
+/* ===== Dark Mode — iOS 18 Dark Appearance ===== */
 @media (prefers-color-scheme: dark) {
   :root {
     --accent: #0A84FF;
-    --accent-soft: rgba(10, 132, 255, 0.15);
+    --accent-2: #64D2FF;
+    --accent-soft: rgba(10, 132, 255, 0.12);
     --accent-hover: #409CFF;
-    --accent-glow: rgba(10, 132, 255, 0.20);
-    --accent-border: rgba(10, 132, 255, 0.30);
+    --accent-glow: rgba(10, 132, 255, 0.18);
+    --accent-border: rgba(10, 132, 255, 0.25);
+    --accent-pressed: #5CA9FF;
 
     --green: #30D158;
-    --green-soft: rgba(48, 209, 88, 0.15);
-    --green-border: rgba(48, 209, 88, 0.30);
+    --green-light: #32E85E;
+    --green-soft: rgba(48, 209, 88, 0.12);
+    --green-bg: rgba(48, 209, 88, 0.15);
+    --green-border: rgba(48, 209, 88, 0.25);
+
     --amber: #FF9F0A;
-    --amber-soft: rgba(255, 159, 10, 0.15);
+    --amber-soft: rgba(255, 159, 10, 0.12);
+    --amber-bg: rgba(255, 159, 10, 0.15);
+    --amber-border: rgba(255, 159, 10, 0.25);
+
     --red: #FF453A;
-    --red-soft: rgba(255, 69, 58, 0.15);
-    --red-border: rgba(255, 69, 58, 0.30);
+    --red-light: #FF6B61;
+    --red-soft: rgba(255, 69, 58, 0.12);
+    --red-bg: rgba(255, 69, 58, 0.15);
+    --red-border: rgba(255, 69, 58, 0.25);
+
+    --blue: #0A84FF;
+    --blue-soft: rgba(10, 132, 255, 0.12);
+    --blue-bg: rgba(10, 132, 255, 0.15);
 
     --bg: #000000;
+    --bg-warm: #0C0C0E;
     --bg-secondary: #1C1C1E;
     --bg-tertiary: #2C2C2E;
     --bg-elevated: #1C1C1E;
+    --bg-glass: rgba(28, 28, 30, 0.80);
+
     --surface: #1C1C1E;
     --surface-alt: #2C2C2E;
     --surface-pressed: #3A3A3C;
+    --surface-hover: rgba(255, 255, 255, 0.05);
 
-    --border: rgba(255, 255, 255, 0.08);
-    --border-strong: rgba(255, 255, 255, 0.12);
-    --border-hover: rgba(255, 255, 255, 0.18);
-    --separator: rgba(255, 255, 255, 0.06);
+    --border: rgba(255, 255, 255, 0.06);
+    --border-strong: rgba(255, 255, 255, 0.10);
+    --border-hover: rgba(255, 255, 255, 0.15);
+    --separator: rgba(255, 255, 255, 0.04);
+    --separator-strong: rgba(255, 255, 255, 0.08);
 
     --text: #FFFFFF;
     --text-secondary: #EBEBF5;
     --text-tertiary: #8E8E93;
     --text-quaternary: #636366;
+    --text-placeholder: #48484A;
     --text-inverse: #000000;
     --text-link: #0A84FF;
 
-    --shadow-sm: 0 0.5px 2px rgba(0, 0, 0, 0.30), 0 1px 3px rgba(0, 0, 0, 0.20);
-    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.35), 0 4px 16px rgba(0, 0, 0, 0.25);
-    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.40), 0 8px 32px rgba(0, 0, 0, 0.30);
-    --shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.45), 0 16px 48px rgba(0, 0, 0, 0.35);
-    --shadow-fab: 0 4px 12px rgba(10, 132, 255, 0.30), 0 2px 6px rgba(10, 132, 255, 0.18);
-    --shadow-fab-dark: 0 6px 16px rgba(0, 0, 0, 0.40), 0 2px 6px rgba(0, 0, 0, 0.25);
+    --gradient-accent: linear-gradient(135deg, #0A84FF 0%, #64D2FF 100%);
+    --gradient-green: linear-gradient(135deg, #30D158 0%, #32E85E 100%);
+    --gradient-red: linear-gradient(135deg, #FF453A 0%, #FF6B61 100%);
+    --gradient-amber: linear-gradient(135deg, #FF9F0A 0%, #FFD60A 100%);
+    --gradient-surface: linear-gradient(180deg, #1C1C1E 0%, #2C2C2E 100%);
+    --gradient-hero: linear-gradient(135deg, rgba(10, 132, 255, 0.10) 0%, rgba(100, 210, 255, 0.05) 100%);
+
+    --shadow-xs: 0 0.5px 1px rgba(0, 0, 0, 0.20), 0 1px 2px rgba(0, 0, 0, 0.15);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.20);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.30), 0 2px 4px rgba(0, 0, 0, 0.20);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.35), 0 4px 8px rgba(0, 0, 0, 0.25);
+    --shadow-xl: 0 12px 40px rgba(0, 0, 0, 0.40), 0 8px 16px rgba(0, 0, 0, 0.30);
+    --shadow-fab: 0 4px 16px rgba(10, 132, 255, 0.25), 0 2px 8px rgba(10, 132, 255, 0.15);
+    --shadow-inner: inset 0 1px 2px rgba(0, 0, 0, 0.15);
+    --shadow-glow: 0 0 20px rgba(10, 132, 255, 0.18);
   }
 }

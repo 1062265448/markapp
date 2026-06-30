@@ -21,11 +21,12 @@ import { NickelHistoryService } from './nickel-history.service';
 import { RecognizeDto, CompareDto } from './dto/recognize.dto';
 import { ApiKeyGuard } from './guards/api-key.guard';
 import { RateLimitGuard } from './guards/rate-limit.guard';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { Response } from 'express';
 import * as fs from 'fs';
 
 @Controller('api/nickel')
-@UseGuards(ApiKeyGuard, RateLimitGuard)
+@UseGuards(ApiKeyGuard, RateLimitGuard, JwtAuthGuard)
 export class NickelController {
   private readonly logger = new Logger(NickelController.name);
 

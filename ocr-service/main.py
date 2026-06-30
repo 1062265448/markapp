@@ -1,6 +1,8 @@
 """RapidOCR + zxing-cpp 条码扫描 HTTP 微服务 — 端口 8866"""
 import base64
+import hmac
 import io
+import logging
 import os
 import time
 from fastapi import FastAPI, Header, HTTPException
@@ -8,6 +10,9 @@ from pydantic import BaseModel, Field
 from rapidocr_onnxruntime import RapidOCR
 from PIL import Image
 from zxingcpp import read_barcode, BarcodeFormat
+
+logger = logging.getLogger("ocr-service")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
 app = FastAPI(title="RapidOCR + Barcode Service", version="2.0.0")
 
@@ -40,10 +45,10 @@ ocr = RapidOCR()
 
 
 def _verify_api_key(x_api_key: str | None):
-    """验证 API Key（未配置则跳过）"""
+    """验证 API Key（未配置则跳过）；用 hmac.compare_digest 避免时序攻击"""
     if not OCR_API_KEY:
         return
-    if not x_api_key or x_api_key != OCR_API_KEY:
+    if not x_api_key or not hmac.compare_digest(x_api_key, OCR_API_KEY):
         raise HTTPException(status_code=401, detail="无效的API密钥")
 
 
@@ -82,13 +87,12 @@ def _run_ocr(image: Image.Image) -> dict:
     """执行 RapidOCR 文本识别"""
     import numpy as np
     img_array = np.array(image)
-    print(f"[DEBUG] _run_ocr: image shape={img_array.shape}, dtype={img_array.dtype}")
 
     start = time.perf_counter()
     try:
         ocr_result, _ = ocr(img_array)
     except Exception as e:
-        print(f"[ERROR] RapidOCR failed: {e}")
+        logger.exception("RapidOCR failed: %s", e)
         raise
     latency = time.perf_counter() - start
 

@@ -71,6 +71,24 @@ export class NickelConfigService {
     return this.configService.get<number>('IMAGE_RETENTION_DAYS', 10);
   }
 
+  // Auth
+  get adminUsername(): string {
+    return this.configService.get<string>('ADMIN_USERNAME', '');
+  }
+
+  get adminPassword(): string {
+    return this.configService.get<string>('ADMIN_PASSWORD', '');
+  }
+
+  get tokenSecret(): string {
+    return this.configService.get<string>('TOKEN_SECRET', '');
+  }
+
+  // Proxy / Network
+  get trustProxy(): boolean {
+    return this.configService.get<string>('TRUST_PROXY', 'false') === 'true';
+  }
+
   isProduction(): boolean {
     return this.nodeEnv === 'production';
   }

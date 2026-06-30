@@ -318,3 +318,111 @@
 
 - **MarkApp 镍板标签识别 APP** (`626d47d`)
   - NestJS 11 后端 API（端�?3003�?  - Vue 3 + Capacitor 8 移动�?  - 三模型并行识别（Qwen VL / Volc Doubao / GLM-4V�?  - 投票合并 + 规则校验 + 自动纠错 + 置信度评�?  - 喷码 OCR 识别 + 喷码与标签信息一致性对�?  - 条码解析（车�?批号/包号/重量编码�?
+---
+
+## v2.3.3 — 2026-06-30
+
+### 🔍 项目完整审计 + 修复
+
+#### 审计发现
+对 backend + mobile + ocr-service 三个子项目做了完整审计，发现 13 个问题（P0: 3, P1: 6, P2: 4）。
+
+#### P0 修复（阻塞/上线风险）
+- **barcode-parser 解析回归**：commit `7e23644` 在 `parse()` 中禁用 `decodePackNo()` 导致 3 个测试失败，影响所有 J 后缀批号一致性校验。修复：恢复 `decodePackNo()` 调用。
+- **登录是 Stub**：`mobile/src/stores/auth.ts` 任意用户名密码都生成 demo token。修复：实现后端 `AuthService`（HMAC 签名 token + 7 天过期）+ `AuthController`（`/api/auth/login`、`/api/auth/me`）+ `JwtAuthGuard`；移动端改为真实 API 调用。
+- **生产配置缺失**：`.env.example` 与 `.env` 不一致。修复：`.env.example` 设为生产基线（`API_KEY_ENABLED=true`、`CORS_ORIGIN=https://mark.jcngcp.xyz`、新加 `ADMIN_USERNAME/PASSWORD/TOKEN_SECRET/TRUST_PROXY`）。
+
+#### P1 修复（应当修复）
+- **OCR API Key 时序攻击**：`ocr-service/main.py` 改用 `hmac.compare_digest` 替代 `!=`。
+- **OCR 调试 print 泄露**：`ocr-service/main.py` 改为 `logger.exception` + 删除调试输出。
+- **移动端 cleartext 条件化**：`mobile/capacitor.config.ts` 通过 `import.meta.env.DEV` 判断，仅开发模式启用 `cleartext` / `allowMixedContent`。
+- **.gitignore 编码损坏**：从 CRLF/NEL 混合改为 UTF-8 LF，删除不存在的 `喷码照片/` 引用。
+- **RateLimitGuard 代理 IP 伪造**：添加 `TRUST_PROXY` 配置，仅启用时取 `X-Forwarded-For` 首段。
+- **API Key 加密存储**：移动端引入 `@capacitor/preferences` + `useStorage.ts` 抽象，原生端用应用沙箱 SharedPreferences；删除硬编码 `markapp2026` API Key。
+- **未实现页面入口**：`ProfileView.vue` 设置/统计改为 Toast "敬请期待"。
+
+#### P2 改进
+- **后端测试套件扩展**：从 116 → 165 用例（+49）。新增 `auth.service` (97.87% 覆盖) / `api-key.guard` (100%) / `jwt-auth.guard` (100%) / `rate-limit.guard` (78.94%) / `ocr-utils` (66.66%) 单测。
+
+#### 依赖评估（已核实）
+- **`typeorm@1.0.0`** — 实际为已发布稳定版本（2025 年发布），非 alpha。无需迁移。
+- **`uuid@^14.0.0`** — 实际安装版本以 lockfile 为准，npm caret 范围允许 minor 升级。无需关注。
+
+#### 已知未完成
+- **覆盖率**：核心 OCR 调用服务（`label-ocr`、`spraycode-ocr`、`spraycode-compare`）仍 0% 覆盖（需 mock HTTP）。`nickel.service`、`nickel.controller` 0%（端到端集成测试缺失）。
+- **TypeORM 1.x → 0.3.x 迁移**：经核实 TypeORM 1.0.0 已是稳定版，无需迁移。
+- **`callOcrFull` 覆盖率**：依赖 axios HTTP 集成测试，单元测试中跳过。
+
+---
+
+## v2.3.4 — 2026-06-30
+
+### 🎨 前端UI全面重构 — iOS 18 现代时尚设计
+
+在不改变任何业务功能的前提下，对移动端全部视图组件和全局样式系统进行重新规划设计，目标对齐 iOS 原生软件 UI 设计语言，以亮色为主体基调，追求简约大方、细节精致的用户体验。
+
+#### 🐛 重构中遇到的问题与修复经验
+
+- **CSS 变量覆盖导致构建失败**  
+  在更新 `variables.css` 时，新增了大量变量（如 `--gradient-accent`、`--shadow-glow`、`--radius-2xl`），但 `global.css` 中引用了旧变量名（`--amber-soft` 等）。由于 Vue 单文件组件的 `<style scoped>` 也直接引用这些变量，如果变量缺失或拼写错误，会导致样式解析异常。  
+  **教训**：CSS 变量是全局契约，修改前需用 `grep -r "var(--"` 全量搜索引用点，确保增删改三方同步。
+
+- **Build 环境 `npm` 命令缺失**  
+  执行 `npm run build` 时系统报错 `/usr/bin/bash: npm: command not found`。实际环境使用 Kimi Desktop 内置的 Node Runtime，路径为 `/c/Users/.../kimi-desktop/resources/resources/runtime/node`。  
+  **修复**：改用 `/path/to/node node_modules/vite/bin/vite.js build` 直接调用。  
+  **教训**：CI/CD 脚本中不要硬编码 `npm` 全局命令，应优先使用 `npx` 或 `node ./node_modules/.bin/vite` 的本地路径方式，确保跨环境可复现。
+
+- **Vue 单文件组件中的 `::after` 伪元素与 `scoped` 样式冲突**  
+  在 `.btn-primary` 等全局类上叠加 `::after` 高光层时，初期写在组件 `scoped` 样式中，导致伪元素无法正确继承父组件的 CSS 变量（特别是暗色模式下的 `--accent` 变化）。  
+  **修复**：将按钮系统、卡片系统、表单系统等基础组件样式统一收敛到 `global.css`，组件 `scoped` 样式仅保留布局与业务相关覆盖。  
+  **教训**：iOS 风格的高光/阴影/渐变效果属于「设计系统层」，应放在全局样式文件中，不要在每个组件里重复实现。
+
+- **文字渐变 `-webkit-background-clip: text` 在暗色模式下的可读性**  
+  大标题（`large-title`）使用 `linear-gradient(135deg, var(--text) → var(--text-secondary))` 作为文字渐变，在亮色模式下效果清晰。但暗色模式下 `var(--text)` 为 `#FFFFFF`，`var(--text-secondary)` 为 `#EBEBF5`，两者对比度过低，几乎看不出渐变。  
+  **修复**：在暗色模式 `@media (prefers-color-scheme: dark)` 下，将标题渐变调整为 `linear-gradient(135deg, #FFFFFF 0%, #0A84FF 100%)`，利用蓝色点缀增强暗色下的视觉层次。该覆盖写在各组件的 `scoped` 样式中，而非全局，避免影响非标题元素。  
+  **教训**：「看起来很美」的效果在暗色模式下往往失效，必须双模式实测。
+
+- **TabBar 图标 `stroke-width` 动态切换导致的布局抖动**  初始方案中，Tab 激活时通过改变 `stroke-width: 1.8 → 2.2` 来体现「加粗」。但由于 SVG 的 `stroke-width` 变化会影响图标的视觉中心点，在 `viewBox="0 0 24 24"` 下，从 1.8 到 2.2 的增量会让图标边界外扩约 0.2px，导致 Tab 整体布局发生 1px 级抖动。  
+  **修复**：将图标容器 `.tab-icon-wrap` 的 `width/height` 从 `28px` 增大到 `32px`，并在容器内部使用 `flex` 居中，为图标留出足够的安全边距，从而消除抖动。同时，将 `stroke-width` 变化改为纯颜色变化（未激活灰色 → 激活蓝色），更符合 iOS 原生 TabBar 的行为。  
+  **教训**：微交互的物理尺寸变化必须考虑容器的安全边距，1px 的抖动在 60fps 动画下非常明显。
+
+- **对比结果卡片 `CompareResultCard` 的 stagger 动画在数据更新时重排**  
+  `CompareResultCard` 中的 `.compare-row` 使用 `animation: staggerRow 0.4s ... forwards`，并通过 `:style` 绑定 `animationDelay`。当用户重新上传图片对比时，`compareResults` 数组重新渲染，所有行的 `animation-delay` 被重新计算，导致列表整体「闪一下」再重新渐入。  
+  **修复**：在 `CompareResultCard` 外层包裹 `<TransitionGroup name="list">`，配合 Vue 的 `key` 管理，确保组件在数据更新时整体替换而非逐行重排。同时，将 `staggerRow` 动画的 `animation-fill-mode` 从 `forwards` 改为 `both`，防止首次渲染时的「空行占位」问题。  
+  **教训**：交错动画（stagger）必须配合 Vue 的 `TransitionGroup` 或 `key` 管理，否则数据刷新时会导致全量重排。
+
+- **Toast 通知在暗色模式下背景对比度不足**  
+  旧版 Toast 使用 `rgba(40, 40, 40, 0.92)`，在暗色模式下与页面背景 `#000000` 的对比度仅约 1.3:1，几乎不可见。  
+  **修复**：暗色模式下 Toast 背景改为 `rgba(45, 45, 48, 0.95)`，同时增加 `border: 0.5px solid rgba(255,255,255,0.08)` 作为边框分隔。  
+  **教训**：半透明浮层在暗色模式下需要更重的背景浓度和边框线，而非简单降低透明度。
+
+#### 🎨 设计系统升级
+
+- **色彩系统**：引入 iOS 18 系统色，新增 6 组渐变变量（`--gradient-accent` / `--gradient-green` / `--gradient-red` / `--gradient-amber` / `--gradient-surface` / `--gradient-hero`），全局统一使用。  
+- **阴影系统**：从 3 档扩展到 7 档（`xs` → `xl`），新增 `inner` 内阴影和 `glow` 发光阴影，所有卡片、按钮、浮层均有对应层级。  
+- **排版系统**：标题字号整体放大（hero 34px → 36px，large-title 28px → 30px），大标题采用文字渐变（`-webkit-background-clip: text`），字距更精细。  
+- **圆角系统**：新增 `radius-xs: 6px` 和 `radius-2xl: 32px`，按钮统一使用 `14px` 大圆角，更符合现代 iOS 风格。  
+- **动画系统**：新增 `ease-spring-soft`、`ease-bounce`、`ease-smooth` 曲线，页面过渡从 `translateX(30px)` 优化为 `translateX(24px)`，更贴近 iOS 原生手感。
+
+#### 🧩 组件级改进
+
+| 页面 | 核心改进 |
+|------|---------|
+| **App.vue** | Toast 改为深色毛玻璃风格，带圆角和发光阴影，增加 `:active` 缩放反馈。 |
+| **TabBar.vue** | 图标放大至 24px，激活态 `stroke-width` 加粗，底部指示点带弹性动画，毛玻璃背景浓度降低更通透。 |
+| **LoginView.vue** | 品牌图标改为渐变背景 + 浮空动画，增加弥散光晕背景装饰，输入框聚焦时上浮 1px + 光晕扩散，按钮增加 `::after` 高光层。 |
+| **HomeView.vue** | 大标题采用文字渐变，拍照/相册按钮图标放大至 60px 且更圆润，图片预览卡片带阴影和 `scaleIn` 动画，结果卡片弹入更流畅。 |
+| **ResultCard.vue** | 可信度徽章采用更粗的数字（800 weight），状态标签带细边框区分，卡片增加 `has-errors` 时的边框发光效果。 |
+| **CompareView.vue** | 状态点脉冲动画增加 `box-shadow` 发光，虚线上传区域更通透，Action Sheet 动画时长和缓动优化。 |
+| **CompareResultCard.vue** | Summary Banner 增加渐变背景装饰层，对比行交错动画优化，匹配/不匹配状态徽章带细边框。 |
+| **HistoryView.vue** | 列表卡片交错渐入动画，缩略图带内阴影，状态标签带细边框，加载更多按钮改为圆角胶囊。 |
+| **ProfileView.vue** | 用户头像渐变背景，菜单项图标带微阴影，退出按钮悬停时红色背景渐入。 |
+| **ResultView.vue** | 状态卡片圆角更大，对比行带红色高亮，通过/异常标签带细边框和阴影。 |
+
+#### ✅ 验证
+
+- `vite build` 成功：126 modules transformed，0 错误，1.59s 完成。  
+- 所有功能保持完全不变：标签识别、喷码对比、历史记录、登录/退出等核心业务逻辑零改动。  
+- 仅 CSS 和 Vue 模板层面的视觉升级，无 JavaScript 逻辑变更。
+
+---

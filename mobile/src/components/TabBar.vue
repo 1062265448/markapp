@@ -8,17 +8,17 @@
       @click="switchTab(tab.name)"
     >
       <div class="tab-icon-wrap">
-        <svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="tab-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <template v-if="tab.name === 'home'">
             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
             <polyline points="9 22 9 12 15 12 15 22"/>
           </template>
           <template v-else-if="tab.name === 'compare'">
-            <rect x="2" y="3" width="8" height="18" rx="1"/>
-            <rect x="14" y="3" width="8" height="18" rx="1"/>
-            <path d="M6 12h2"/>
+            <rect x="2" y="3" width="8" height="18" rx="1.5"/>
+            <rect x="14" y="3" width="8" height="18" rx="1.5"/>
+            <path d="M6 11h2"/>
             <path d="M6 8h2"/>
-            <path d="M16 12h2"/>
+            <path d="M16 11h2"/>
             <path d="M16 8h2"/>
           </template>
           <template v-else-if="tab.name === 'history'">
@@ -65,21 +65,22 @@ const switchTab = (name: string) => {
   left: 0;
   right: 0;
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   display: flex;
   align-items: flex-start;
-  padding-top: 8px;
+  padding-top: 6px;
   border-top: 0.5px solid var(--separator);
   z-index: 50;
   transition: background var(--duration-normal) var(--ease-out);
+  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.02);
 }
 
 @media (prefers-color-scheme: dark) {
   .tab-bar {
-    background: rgba(18, 18, 18, 0.88);
-    border-top-color: rgba(255, 255, 255, 0.06);
+    background: rgba(18, 18, 18, 0.85);
+    border-top-color: rgba(255, 255, 255, 0.05);
   }
 }
 
@@ -88,7 +89,7 @@ const switchTab = (name: string) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   color: var(--text-tertiary);
   cursor: pointer;
   -webkit-user-select: none;
@@ -113,20 +114,24 @@ const switchTab = (name: string) => {
 }
 
 .tab-icon {
-  width: 22px;
-  height: 22px;
-  transition: transform var(--duration-micro) var(--ease-out);
+  width: 24px;
+  height: 24px;
+  transition: transform var(--duration-micro) var(--ease-out), stroke-width var(--duration-micro) var(--ease-out);
 }
 
 .tab:active .tab-icon {
-  transform: scale(0.85);
+  transform: scale(0.88);
+}
+
+.tab.active .tab-icon {
+  stroke-width: 2.2;
 }
 
 .tab-label {
   font-weight: 500;
   font-size: 10px;
   letter-spacing: 0.01em;
-  transition: font-weight var(--duration-fast) var(--ease-out);
+  transition: font-weight var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 
 .tab.active .tab-label {
@@ -134,7 +139,7 @@ const switchTab = (name: string) => {
   color: var(--accent);
 }
 
-/* Active indicator dot */
+/* Active indicator — modern pill */
 .tab.active::after {
   content: '';
   position: absolute;
@@ -146,7 +151,7 @@ const switchTab = (name: string) => {
   border-radius: 50%;
   background: var(--accent);
   opacity: 0;
-  animation: dotAppear 0.3s var(--ease-out-expo) 0.1s forwards;
+  animation: dotAppear 0.35s var(--ease-out-expo) 0.1s forwards;
 }
 
 @keyframes dotAppear {

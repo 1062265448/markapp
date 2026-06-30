@@ -83,14 +83,23 @@ const displayFields = computed(() => {
   border-radius: var(--radius);
   overflow: hidden;
   box-shadow: var(--shadow-md);
-  border: 1px solid var(--border);
-  animation: cardAppear 0.5s var(--ease-out-expo) backwards;
+  border: 0.5px solid var(--border);
+  animation: cardAppear 0.6s var(--ease-out-expo) both;
+  transition: transform var(--duration-micro) var(--ease-out), box-shadow var(--duration-micro) var(--ease-out);
 }
 
-.result-card.has-errors { border-color: var(--accent-border); }
+.result-card.has-errors { 
+  border-color: var(--accent-border); 
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--accent-border);
+}
+
+.result-card:active {
+  transform: scale(0.985);
+  box-shadow: var(--shadow-lg);
+}
 
 @keyframes cardAppear {
-  from { opacity: 0; transform: translateY(20px) scale(0.98); }
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
@@ -101,6 +110,7 @@ const displayFields = computed(() => {
   padding: var(--space-4) var(--space-5);
   padding-bottom: var(--space-3);
   border-bottom: 0.5px solid var(--separator);
+  background: var(--gradient-surface);
 }
 
 .confidence-badge {
@@ -111,17 +121,18 @@ const displayFields = computed(() => {
   border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   transition: all var(--duration-micro) var(--ease-out);
+  border: 0.5px solid var(--border);
 }
 
-.confidence-badge.high { background: var(--green-soft); }
-.confidence-badge.medium { background: var(--amber-soft); }
-.confidence-badge.low { background: var(--red-soft); }
-.confidence-badge.unknown { background: var(--bg-secondary); }
+.confidence-badge.high { background: var(--green-soft); border-color: var(--green-border); }
+.confidence-badge.medium { background: var(--amber-soft); border-color: var(--amber-border); }
+.confidence-badge.low { background: var(--red-soft); border-color: var(--red-border); }
+.confidence-badge.unknown { background: var(--bg-secondary); border-color: var(--border); }
 
 .confidence-value {
   font-family: var(--font-display);
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 800;
   line-height: 1;
   letter-spacing: -0.03em;
 }
@@ -150,20 +161,24 @@ const displayFields = computed(() => {
 .status-tag {
   font-size: var(--text-caption-2);
   font-weight: 600;
-  padding: 4px 10px;
+  padding: 5px 12px;
   border-radius: var(--radius-full);
   letter-spacing: 0.02em;
   text-transform: uppercase;
+  border: 0.5px solid transparent;
+  transition: all var(--duration-micro) var(--ease-out);
 }
 
 .status-tag.clean {
   background: var(--green-soft);
   color: var(--green);
+  border-color: var(--green-border);
 }
 
 .status-tag.has-errors {
   background: var(--red-soft);
   color: var(--red);
+  border-color: var(--red-border);
 }
 
 .card-body { padding: var(--space-2) var(--space-5) var(--space-4); }
@@ -196,9 +211,10 @@ const displayFields = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text);
 }
 
-.value-empty { color: var(--text-quaternary); font-weight: 400; }
+.value-empty { color: var(--text-placeholder); font-weight: 400; }
 
 .card-footer {
   padding: var(--space-3) var(--space-5);

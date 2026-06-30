@@ -4,7 +4,7 @@
       <!-- Brand -->
       <div class="login-header fade-up">
         <div class="brand-icon">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 1-1.7l9-5.2a2 2 0 0 1 2 0l9 5.2A2 2 0 0 1 23 8z"/>
             <circle cx="12" cy="13" r="4"/>
           </svg>
@@ -96,11 +96,43 @@ const handleSubmit = async () => {
   background: var(--bg);
   padding: 40px var(--space-5);
   padding-top: calc(40px + var(--safe-top));
+  position: relative;
+  overflow: hidden;
+}
+
+.login-page::before {
+  content: '';
+  position: absolute;
+  top: -30%;
+  right: -20%;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: var(--gradient-accent);
+  opacity: 0.04;
+  filter: blur(60px);
+  pointer-events: none;
+}
+
+.login-page::after {
+  content: '';
+  position: absolute;
+  bottom: -20%;
+  left: -20%;
+  width: 250px;
+  height: 250px;
+  border-radius: 50%;
+  background: var(--gradient-green);
+  opacity: 0.03;
+  filter: blur(50px);
+  pointer-events: none;
 }
 
 .login-content {
   width: 100%;
   max-width: 360px;
+  position: relative;
+  z-index: 1;
 }
 
 .login-header {
@@ -109,21 +141,32 @@ const handleSubmit = async () => {
 }
 
 .brand-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-lg);
-  background: var(--accent-soft);
-  color: var(--accent);
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-xl);
+  background: var(--gradient-accent);
+  color: var(--text-inverse);
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto var(--space-5);
-  animation: iconFloat 3s ease-in-out infinite;
+  animation: iconFloat 3.5s ease-in-out infinite;
+  box-shadow: var(--shadow-fab);
+  position: relative;
+  overflow: hidden;
+}
+
+.brand-icon::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 50%);
+  pointer-events: none;
 }
 
 @keyframes iconFloat {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+  50% { transform: translateY(-8px); }
 }
 
 .brand-label {
@@ -172,35 +215,37 @@ const handleSubmit = async () => {
 }
 
 .form-input {
-  height: 52px;
+  height: 54px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   padding: 0 var(--space-4);
   font-size: var(--text-body);
   color: var(--text);
   background: var(--surface);
   outline: none;
   font-family: var(--font-body);
-  transition: border-color var(--duration-micro) var(--ease-out), box-shadow var(--duration-micro) var(--ease-out), background var(--duration-micro) var(--ease-out);
+  transition: border-color var(--duration-micro) var(--ease-out), box-shadow var(--duration-micro) var(--ease-out), background var(--duration-micro) var(--ease-out), transform var(--duration-micro) var(--ease-out);
   width: 100%;
+  box-shadow: var(--shadow-xs);
 }
 
 .form-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-glow);
+  box-shadow: 0 0 0 4px var(--accent-glow), var(--shadow-sm);
   background: var(--bg);
+  transform: translateY(-1px);
 }
 
 .form-input::placeholder {
-  color: var(--text-quaternary);
+  color: var(--text-placeholder);
 }
 
 .btn-login {
-  height: 52px;
+  height: 54px;
   background: var(--accent);
   color: var(--text-inverse);
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   font-size: var(--text-subhead);
   font-weight: 600;
   display: flex;
@@ -213,6 +258,16 @@ const handleSubmit = async () => {
   width: 100%;
   font-family: var(--font-body);
   letter-spacing: -0.01em;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-login::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%);
+  pointer-events: none;
 }
 
 .btn-login:active {
@@ -222,7 +277,7 @@ const handleSubmit = async () => {
 }
 
 .btn-login:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   pointer-events: none;
   box-shadow: none;
 }

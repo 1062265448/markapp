@@ -32,10 +32,10 @@
     </section>
 
     <!-- Field Comparison -->
-    <section class="comparison-card">
+    <section class="comparison-card" v-if="compareItems.length > 0">
       <div class="comp-header">
         <span class="comp-header-title">字段对比</span>
-        <span class="comp-header-count" v-if="compareItems.length > 0">{{ compareItems.length }} 项</span>
+        <span class="comp-header-count">{{ compareItems.length }} 项</span>
       </div>
       <div v-for="item in compareItems" :key="item.label" class="comp-row" :class="item.status">
         <div class="comp-label">{{ item.label }}</div>
@@ -157,7 +157,8 @@ const compareItems = computed(() => {
   cursor: pointer;
   transition: background var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
   flex-shrink: 0;
-  border: none;
+  border: 0.5px solid var(--border);
+  box-shadow: var(--shadow-xs);
 }
 
 .back-btn:active {
@@ -169,6 +170,7 @@ const compareItems = computed(() => {
   font-size: var(--text-title-1);
   font-weight: 700;
   letter-spacing: -0.021em;
+  font-family: var(--font-display);
 }
 
 /* Status Card */
@@ -178,22 +180,29 @@ const compareItems = computed(() => {
   gap: var(--space-4);
   padding: var(--space-5);
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 0.5px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
   margin-bottom: var(--space-5);
-  animation: fadeUp 0.4s var(--ease-out-expo);
+  animation: fadeUp 0.5s var(--ease-out-expo) both;
+  transition: transform var(--duration-micro) var(--ease-out), box-shadow var(--duration-micro) var(--ease-out);
+}
+
+.status-card:active {
+  transform: scale(0.985);
+  box-shadow: var(--shadow-md);
 }
 
 .status-icon {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   transition: transform var(--duration-micro) var(--ease-out);
+  box-shadow: var(--shadow-xs);
 }
 
 .status-icon:active {
@@ -203,46 +212,56 @@ const compareItems = computed(() => {
 .status-icon.success {
   background: var(--green-soft);
   color: var(--green);
-  border: 1px solid var(--green-border);
+  border: 0.5px solid var(--green-border);
 }
 
 .status-icon.fail {
   background: var(--red-soft);
   color: var(--red);
-  border: 1px solid var(--red-border);
+  border: 0.5px solid var(--red-border);
 }
 
-.status-title { display: block; font-size: var(--text-title-2); font-weight: 700; }
+.status-title { display: block; font-size: var(--text-title-2); font-weight: 700; letter-spacing: -0.01em; }
 .status-desc { display: block; font-size: var(--text-footnote); color: var(--text-tertiary); margin-top: 3px; }
 
 .status-indicator {
   margin-left: auto;
-  padding: 4px 12px;
+  padding: 5px 14px;
   border-radius: var(--radius-full);
   font-size: var(--text-caption-2);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  border: 0.5px solid transparent;
+  box-shadow: var(--shadow-xs);
 }
 
 .status-indicator.success {
   background: var(--green-soft);
   color: var(--green);
+  border-color: var(--green-border);
 }
 
 .status-indicator.fail {
   background: var(--red-soft);
   color: var(--red);
+  border-color: var(--red-border);
 }
 
 /* Comparison */
 .comparison-card {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 0.5px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
-  animation: fadeUp 0.5s var(--ease-out-expo) 0.1s both;
+  animation: fadeUp 0.6s var(--ease-out-expo) 0.1s both;
+  transition: transform var(--duration-micro) var(--ease-out), box-shadow var(--duration-micro) var(--ease-out);
+}
+
+.comparison-card:active {
+  transform: scale(0.985);
+  box-shadow: var(--shadow-md);
 }
 
 .comp-header {
@@ -279,10 +298,8 @@ const compareItems = computed(() => {
 
 .comp-row:last-child { border-bottom: none; }
 .comp-row:active { background: var(--surface-pressed); }
-
-.comp-row.mismatch {
-  background: var(--red-soft);
-}
+.comp-row.mismatch { background: var(--red-soft); }
+.comp-row.mismatch:active { background: rgba(255, 59, 48, 0.12); }
 
 .comp-label {
   min-width: 60px;
@@ -303,18 +320,19 @@ const compareItems = computed(() => {
   letter-spacing: 0.02em;
 }
 
-.comp-val.spray { color: var(--text); }
+.comp-val.spray { color: var(--text); font-weight: 600; }
 .comp-val.label { color: var(--text-tertiary); font-size: var(--text-footnote); }
 
 .comp-badge {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   transition: transform var(--duration-fast) var(--ease-out);
+  box-shadow: var(--shadow-xs);
 }
 
 .comp-badge:active {
@@ -324,13 +342,13 @@ const compareItems = computed(() => {
 .comp-badge.match {
   background: var(--green-soft);
   color: var(--green);
-  border: 1px solid var(--green-border);
+  border: 0.5px solid var(--green-border);
 }
 
 .comp-badge.mismatch {
   background: var(--red-soft);
   color: var(--red);
-  border: 1px solid var(--red-border);
+  border: 0.5px solid var(--red-border);
 }
 
 @keyframes fadeUp {

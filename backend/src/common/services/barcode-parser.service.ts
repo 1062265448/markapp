@@ -127,10 +127,8 @@ export class BarcodeParserService {
     const mm = productionDateCode.slice(2, 4);
     const dd = productionDateCode.slice(4, 6);
 
-    // 包号暂不解码（条码原始值即为包号，解码规则待后续启用）
-    // const { packNo: expectedPackNo, batchNoSuffixLetter } = this.decodePackNo(packCode);
-    const expectedPackNo = packCode.toString();
-    const batchNoSuffixLetter = ''; // 解码规则未启用，暂不加J后缀
+    // 包号编码解码：0-200 直接为包号；>200 时减去周期基数，并附加 J 后缀
+    const { packNo: expectedPackNo, batchNoSuffixLetter } = this.decodePackNo(packCode);
 
     return {
       barcode,

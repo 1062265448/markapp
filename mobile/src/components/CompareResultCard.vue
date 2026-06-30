@@ -49,7 +49,6 @@
               <span class="compare-field-en">{{ item.fieldLabelEn }}</span>
             </div>
 
-            <!-- 匹配 / 不匹配 → 分喷码标签两侧显示 -->
             <div v-if="item.matched === true || item.matched === false" class="compare-sides">
               <div class="compare-side">
                 <span class="side-label">喷码</span>
@@ -65,12 +64,10 @@
               </div>
             </div>
 
-            <!-- 双方缺失 -->
             <div v-else-if="item.diffType === 'both-missing'" class="compare-missing">
               <span class="missing-text">均未识别</span>
             </div>
 
-            <!-- 单方缺失 -->
             <div v-else class="compare-sides">
               <div class="compare-side">
                 <span class="side-label">喷码</span>
@@ -187,10 +184,10 @@ const statusClass = (item: CompareResultItem) => {
 </script>
 
 <style scoped>
-.compare-card { margin-bottom: var(--space-4); animation: cardAppear 0.5s var(--ease-out-expo); }
+.compare-card { margin-bottom: var(--space-4); animation: cardAppear 0.6s var(--ease-out-expo) both; }
 
 @keyframes cardAppear {
-  from { opacity: 0; transform: translateY(20px) scale(0.98); }
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
@@ -205,25 +202,48 @@ const statusClass = (item: CompareResultItem) => {
   font-size: var(--text-subhead);
   margin-bottom: var(--space-4);
   box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border);
+  border: 0.5px solid var(--border);
   transition: all var(--duration-micro) var(--ease-out);
+  position: relative;
+  overflow: hidden;
+}
+
+.summary-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.06;
+  pointer-events: none;
 }
 
 .summary-banner:active { transform: scale(0.985); }
-.summary-banner.passed { background: var(--green-soft); color: var(--green); border-color: var(--green-border); }
-.summary-banner.failed { background: var(--red-soft); color: var(--red); border-color: var(--red-border); }
+
+.summary-banner.passed {
+  background: var(--green-soft);
+  color: var(--green);
+  border-color: var(--green-border);
+}
+.summary-banner.passed::before { background: var(--gradient-green); }
+
+.summary-banner.failed {
+  background: var(--red-soft);
+  color: var(--red);
+  border-color: var(--red-border);
+}
+.summary-banner.failed::before { background: var(--gradient-red); }
 
 .summary-icon {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px) saturate(120%);
+  -webkit-backdrop-filter: blur(4px) saturate(120%);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 .summary-content { flex: 1; display: flex; flex-direction: column; gap: 2px; }
@@ -246,7 +266,7 @@ const statusClass = (item: CompareResultItem) => {
 /* Compare Section */
 .compare-section, .detail-section {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 0.5px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
   margin-bottom: var(--space-3);
@@ -273,8 +293,8 @@ const statusClass = (item: CompareResultItem) => {
 .compare-row:last-child { border-bottom: none; }
 .compare-row:active { background: var(--surface-pressed); }
 .compare-row.mismatch { background: var(--red-soft); }
-.compare-row.mismatch:active { background: rgba(255, 59, 48, 0.15); }
-.compare-row.missing { background: var(--orange-soft, rgba(255, 149, 0, 0.06)); }
+.compare-row.mismatch:active { background: rgba(255, 59, 48, 0.12); }
+.compare-row.missing { background: var(--amber-soft, rgba(255, 149, 0, 0.04)); }
 .compare-row.both-missing { background: var(--bg-secondary); }
 
 /* Status Icon */
@@ -288,12 +308,13 @@ const statusClass = (item: CompareResultItem) => {
   flex-shrink: 0;
   margin-top: 2px;
   transition: transform var(--duration-fast) var(--ease-out);
+  box-shadow: var(--shadow-xs);
 }
 
 .compare-status:active { transform: scale(0.9); }
-.compare-status.match { background: var(--green-soft); color: var(--green); border: 1px solid var(--green-border); }
-.compare-status.mismatch { background: var(--red-soft); color: var(--red); border: 1px solid var(--red-border); }
-.compare-status.neutral { background: var(--bg-secondary); color: var(--text-tertiary); border: 1px solid var(--border); }
+.compare-status.match { background: var(--green-soft); color: var(--green); border: 0.5px solid var(--green-border); }
+.compare-status.mismatch { background: var(--red-soft); color: var(--red); border: 0.5px solid var(--red-border); }
+.compare-status.neutral { background: var(--bg-secondary); color: var(--text-tertiary); border: 0.5px solid var(--border); }
 
 .status-dash { font-size: 14px; color: var(--text-quaternary); }
 
@@ -310,7 +331,7 @@ const statusClass = (item: CompareResultItem) => {
 .compare-side { display: flex; flex-direction: column; gap: 1px; }
 .side-label { font-size: 10px; color: var(--text-quaternary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
 .side-value { font-size: var(--text-subhead); font-family: var(--font-mono); font-weight: 500; color: var(--text); }
-.side-value.val-err { color: var(--red); font-weight: 600; }
+.side-value.val-err { color: var(--red); font-weight: 700; }
 .side-value.val-missing { color: var(--text-tertiary); font-style: italic; font-family: inherit; }
 
 .side-sep { font-size: var(--text-footnote); color: var(--text-quaternary); font-weight: 500; margin: 0 2px; }
@@ -333,6 +354,6 @@ const statusClass = (item: CompareResultItem) => {
 .field-row:active { background: var(--surface-pressed); }
 
 .field-label { font-size: var(--text-footnote); color: var(--text-secondary); font-weight: 500; }
-.field-value { font-size: var(--text-subhead); font-weight: 500; font-family: var(--font-mono); letter-spacing: 0.02em; }
-.field-value.val-empty { color: var(--text-quaternary); font-family: inherit; }
+.field-value { font-size: var(--text-subhead); font-weight: 600; font-family: var(--font-mono); letter-spacing: 0.02em; color: var(--text); }
+.field-value.val-empty { color: var(--text-placeholder); font-family: inherit; font-weight: 400; }
 </style>

@@ -22,10 +22,13 @@ export class RateLimitGuard implements CanActivate, OnModuleDestroy {
   }
 
   private getClientIp(request: any): string {
-    const forwarded = request.headers['x-forwarded-for'];
-    if (forwarded) {
-      const ips = typeof forwarded === 'string' ? forwarded.split(',') : forwarded;
-      return ips[0].trim();
+    // 仅当 trustProxy=true 时才信任 X-Forwarded-For（防止客户端伪造绕过限流）
+    if (this.configService.trustProxy) {
+      const forwarded = request.headers['x-forwarded-for'];
+      if (forwarded) {
+        const ips = typeof forwarded === 'string' ? forwarded.split(',') : forwarded;
+        return ips[0].trim();
+      }
     }
     return request.ip || request.connection?.remoteAddress || 'unknown';
   }

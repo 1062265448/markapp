@@ -183,12 +183,16 @@ const doRecognize = async () => {
   margin-bottom: var(--space-6);
 }
 
-.header-title, .large-title {
+.large-title {
   font-size: var(--text-hero);
-  font-weight: 700;
-  letter-spacing: -0.022em;
-  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.08;
   font-family: var(--font-display);
+  background: linear-gradient(135deg, var(--text) 0%, var(--text-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .header-desc {
@@ -209,8 +213,8 @@ const doRecognize = async () => {
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
-  border: 1px solid var(--border);
-  animation: scaleIn 0.4s var(--ease-out-expo);
+  border: 0.5px solid var(--border);
+  animation: scaleIn 0.5s var(--ease-out-expo) both;
 }
 
 .image-preview {
@@ -234,8 +238,8 @@ const doRecognize = async () => {
   height: 32px;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px) saturate(180%);
+  -webkit-backdrop-filter: blur(8px) saturate(180%);
   color: #fff;
   display: flex;
   align-items: center;
@@ -259,20 +263,20 @@ const doRecognize = async () => {
 }
 
 .action-btn {
-  height: 140px;
+  height: 150px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 0.5px solid var(--border);
   border-radius: var(--radius);
   color: var(--text-secondary);
   font-size: var(--text-subhead);
   font-weight: 600;
   transition: all var(--duration-micro) var(--ease-out);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-xs);
   cursor: pointer;
   position: relative;
   overflow: hidden;
@@ -298,13 +302,13 @@ const doRecognize = async () => {
 }
 
 .action-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   pointer-events: none;
 }
 
 .action-icon-wrap {
-  width: 56px;
-  height: 56px;
+  width: 60px;
+  height: 60px;
   border-radius: var(--radius-lg);
   background: var(--accent-soft);
   color: var(--accent);
@@ -315,6 +319,7 @@ const doRecognize = async () => {
   position: relative;
   z-index: 1;
   transition: transform var(--duration-micro) var(--ease-out), background var(--duration-micro) var(--ease-out);
+  box-shadow: var(--shadow-xs);
 }
 
 .action-btn:active .action-icon-wrap {
@@ -328,7 +333,7 @@ const doRecognize = async () => {
 }
 
 .action-btn:active .action-icon-wrap.gallery-icon {
-  background: rgba(52, 199, 89, 0.2);
+  background: var(--green-bg);
 }
 
 .action-label {
@@ -355,8 +360,8 @@ const doRecognize = async () => {
 .options-card {
   background: var(--surface);
   border-radius: var(--radius);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
+  border: 0.5px solid var(--border);
+  box-shadow: var(--shadow-xs);
   overflow: hidden;
   padding: var(--space-3) var(--space-4);
 }
@@ -385,12 +390,25 @@ const doRecognize = async () => {
 .barcode-input {
   flex: 1;
   max-width: 200px;
-  height: 40px;
+  height: 42px;
   font-size: var(--text-subhead);
   margin-left: var(--space-3);
   text-align: right;
   padding: 0 var(--space-3);
   border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  transition: border-color var(--duration-micro) var(--ease-out), box-shadow var(--duration-micro) var(--ease-out), background var(--duration-micro) var(--ease-out);
+}
+
+.barcode-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  background: var(--bg);
+}
+
+.barcode-input::placeholder {
+  color: var(--text-placeholder);
 }
 
 /* Action section */
@@ -405,16 +423,16 @@ const doRecognize = async () => {
 /* Result section */
 .result-section {
   margin-top: var(--space-4);
-  animation: fadeUp 0.5s var(--ease-out-expo);
+  animation: fadeUp 0.6s var(--ease-out-expo) both;
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.95); }
+  from { opacity: 0; transform: scale(0.94); }
   to { opacity: 1; transform: scale(1); }
 }
 
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(20px); }
+  from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
 }
 </style>

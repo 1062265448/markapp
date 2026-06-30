@@ -178,10 +178,15 @@ const loadMoreRecords = () => {
   margin-bottom: var(--space-5);
 }
 
-.header-title, .title-1 {
+.title-1 {
   font-size: var(--text-large-title);
   font-weight: 700;
   letter-spacing: -0.021em;
+  font-family: var(--font-display);
+  background: linear-gradient(135deg, var(--text) 0%, var(--text-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .clear-btn-text {
@@ -196,11 +201,12 @@ const loadMoreRecords = () => {
   cursor: pointer;
   padding: var(--space-2);
   border-radius: var(--radius-xs);
-  transition: background var(--duration-fast) var(--ease-out);
+  transition: background var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
 }
 
 .clear-btn-text:active {
   background: var(--red-soft);
+  transform: scale(0.95);
 }
 
 /* Record cards */
@@ -210,15 +216,15 @@ const loadMoreRecords = () => {
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 0.5px solid var(--border);
   border-radius: var(--radius-sm);
   margin-bottom: var(--space-2);
   cursor: pointer;
   transition: all var(--duration-micro) var(--ease-out);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-xs);
   opacity: 0;
-  transform: translateY(12px);
-  animation: staggerItem 0.4s var(--ease-out-expo) forwards;
+  transform: translateY(10px);
+  animation: staggerItem 0.45s var(--ease-out-expo) forwards;
 }
 
 .record-card.stagger-delay {
@@ -232,24 +238,25 @@ const loadMoreRecords = () => {
 }
 
 @keyframes staggerItem {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .record-thumb {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   border-radius: var(--radius-xs);
   overflow: hidden;
   flex-shrink: 0;
   background: var(--bg-secondary);
+  box-shadow: var(--shadow-inner);
 }
 
 .record-thumb img { width: 100%; height: 100%; object-fit: cover; }
 
 .record-thumb-placeholder {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   border-radius: var(--radius-xs);
   background: var(--bg-secondary);
   display: flex;
@@ -257,6 +264,7 @@ const loadMoreRecords = () => {
   justify-content: center;
   color: var(--text-quaternary);
   flex-shrink: 0;
+  box-shadow: var(--shadow-inner);
 }
 
 .record-info { flex: 1; min-width: 0; }
@@ -274,11 +282,12 @@ const loadMoreRecords = () => {
   padding: 3px 8px;
   border-radius: var(--radius-full);
   letter-spacing: 0.01em;
+  border: 0.5px solid transparent;
 }
 
-.badge.recognize { background: var(--accent-soft); color: var(--accent); }
-.badge.spraycode { background: var(--amber-soft); color: var(--amber); }
-.badge.compare { background: var(--green-soft); color: var(--green); }
+.badge.recognize { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-border); }
+.badge.spraycode { background: var(--amber-soft); color: var(--amber); border-color: var(--amber-border); }
+.badge.compare { background: var(--green-soft); color: var(--green); border-color: var(--green-border); }
 
 .record-time {
   font-size: var(--text-caption-2);
@@ -302,10 +311,11 @@ const loadMoreRecords = () => {
   padding: 1px 6px;
   border-radius: var(--radius-full);
   letter-spacing: 0.01em;
+  border: 0.5px solid transparent;
 }
 
-.match-badge.pass { background: var(--green-soft); color: var(--green); }
-.match-badge.fail { background: var(--red-soft); color: var(--red); }
+.match-badge.pass { background: var(--green-soft); color: var(--green); border-color: var(--green-border); }
+.match-badge.fail { background: var(--red-soft); color: var(--red); border-color: var(--red-border); }
 
 .delete-btn {
   width: 28px;
@@ -342,19 +352,21 @@ const loadMoreRecords = () => {
   font-weight: 600;
   padding: var(--space-2) var(--space-5);
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 0.5px solid var(--border);
   border-radius: var(--radius-full);
   cursor: pointer;
   transition: all var(--duration-micro) var(--ease-out);
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: var(--shadow-xs);
 }
 
 .btn-load:active {
   transform: scale(0.97);
   background: var(--accent-soft);
   border-color: var(--accent-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .btn-load:disabled {

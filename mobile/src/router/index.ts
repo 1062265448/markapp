@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { authToken } from '@/composables/authToken'
 
 const routes = [
   {
@@ -50,7 +51,7 @@ const router = createRouter({
 
 router.beforeEach((to, _from, next) => {
   document.title = `${(to.meta as { title?: string }).title || 'MarkApp'} — 镍板标签识别`
-  const token = localStorage.getItem('markapp_token')
+  const token = authToken.get()
   const requiresAuth = to.meta.requiresAuth === true
 
   if (requiresAuth && !token) {

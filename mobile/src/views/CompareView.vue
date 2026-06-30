@@ -288,6 +288,7 @@ const doCompare = async () => {
   border-radius: 50%;
   background: var(--accent);
   animation: pulse 2.5s ease-in-out infinite;
+  box-shadow: 0 0 8px rgba(0, 122, 255, 0.3);
 }
 
 @keyframes pulse {
@@ -315,9 +316,10 @@ const doCompare = async () => {
   height: 8px;
   border-radius: 50%;
   background: var(--accent);
+  box-shadow: 0 0 6px rgba(0, 122, 255, 0.2);
 }
 
-.label-dot.secondary { background: var(--text-quaternary); }
+.label-dot.secondary { background: var(--text-quaternary); box-shadow: none; }
 
 .section-label-text {
   font-size: var(--text-footnote);
@@ -337,11 +339,12 @@ const doCompare = async () => {
   text-transform: none;
   letter-spacing: 0;
   margin-left: auto;
+  border: 0.5px solid var(--border);
 }
 
 /* Image Dropzone */
 .image-dropzone {
-  height: 140px;
+  height: 150px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -369,6 +372,7 @@ const doCompare = async () => {
 .image-dropzone:active {
   border-color: var(--accent-border);
   border-style: solid;
+  transform: scale(0.98);
 }
 
 .image-dropzone:active::before {
@@ -376,8 +380,8 @@ const doCompare = async () => {
 }
 
 .dropzone-icon-wrap {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   border-radius: var(--radius-lg);
   background: var(--accent-soft);
   color: var(--accent);
@@ -387,6 +391,7 @@ const doCompare = async () => {
   position: relative;
   z-index: 1;
   transition: transform var(--duration-micro) var(--ease-out);
+  box-shadow: var(--shadow-xs);
 }
 
 .image-dropzone:active .dropzone-icon-wrap {
@@ -421,9 +426,9 @@ const doCompare = async () => {
   background: var(--surface);
   border-radius: var(--radius);
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 0.5px solid var(--border);
   box-shadow: var(--shadow-sm);
-  animation: scaleIn 0.35s var(--ease-out-expo);
+  animation: scaleIn 0.4s var(--ease-out-expo) both;
 }
 
 .image-preview-card.small { max-height: 160px; }
@@ -449,8 +454,8 @@ const doCompare = async () => {
   height: 32px;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px) saturate(180%);
+  -webkit-backdrop-filter: blur(8px) saturate(180%);
   color: #fff;
   display: flex;
   align-items: center;
@@ -472,8 +477,8 @@ const doCompare = async () => {
 .options-card {
   background: var(--surface);
   border-radius: var(--radius);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
+  border: 0.5px solid var(--border);
+  box-shadow: var(--shadow-xs);
   overflow: hidden;
   padding: var(--space-3) var(--space-4);
 }
@@ -487,11 +492,17 @@ const doCompare = async () => {
   background: transparent;
   padding: 0;
   box-shadow: none;
+  color: var(--text);
+  width: 100%;
 }
 
 .barcode-input:focus {
   box-shadow: none;
   background: transparent;
+}
+
+.barcode-input::placeholder {
+  color: var(--text-placeholder);
 }
 
 /* Action */
@@ -502,11 +513,11 @@ const doCompare = async () => {
 /* Result */
 .result-section {
   margin-top: var(--space-4);
-  animation: fadeUp 0.5s var(--ease-out-expo);
+  animation: fadeUp 0.6s var(--ease-out-expo) both;
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.95); }
+  from { opacity: 0; transform: scale(0.94); }
   to { opacity: 1; transform: scale(1); }
 }
 
@@ -516,8 +527,8 @@ const doCompare = async () => {
 }
 
 /* Sheet transitions */
-.sheet-enter-active { animation: sheetFadeIn 0.25s ease; }
-.sheet-leave-active { animation: sheetFadeOut 0.18s ease-in forwards; }
+.sheet-enter-active { animation: sheetFadeIn 0.3s var(--ease-out) both; }
+.sheet-leave-active { animation: sheetFadeOut 0.2s var(--ease-in) forwards; }
 @keyframes sheetFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }

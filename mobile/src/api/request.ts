@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { Capacitor } from '@capacitor/core'
+import { authToken } from '@/composables/authToken'
 
 const DEV_API_URL = 'http://localhost:3003'
 
@@ -25,6 +26,12 @@ const request = axios.create({
 // 请求拦截器
 request.interceptors.request.use(
   (config) => {
+    // 用户 JWT 优先（用户登录后才有 token）
+    const token = authToken.get()
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`
+    }
+    // 服务端 API Key 兜底（兼容未登录场景的机器调用）
     const apiKey = localStorage.getItem('markapp_api_key')
     if (apiKey) {
       config.headers['x-api-key'] = apiKey

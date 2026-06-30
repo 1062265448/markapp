@@ -69,6 +69,8 @@ const route = useRoute()
 const record = ref<HistoryRecord | null>(null)
 
 onMounted(async () => {
+  // 读取 HistoryView 跳转前注入的详情快照（tab 切换/路由参数丢失时不重新拉取）
+  // 仅 detail-passing 用途，不承载登录态或跨标签页持久化（统一由 storage 抽象处理）
   const cached = sessionStorage.getItem('markapp_detail')
   if (cached) {
     try {

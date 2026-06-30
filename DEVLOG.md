@@ -426,3 +426,171 @@
 - 仅 CSS 和 Vue 模板层面的视觉升级，无 JavaScript 逻辑变更。
 
 ---
+
+## v2.3.5 — 2026-06-30
+
+### 🔍 v2.3.4 全面复盘 — 三个问题修复
+
+v2.3.4 提交（前端 UI 重构 + v2.3.3 审计修复）合入后，做了完整的二次审查，发现 3 个需要立即处理的问题。本次提交按"问题记录 → 原因分析 → 修复方案 → 教训总结"的四段式记录。
+
+---
+
+### 🐛 问题 1（P0 — JwtAuthGuard 误伤 /health 健康检查端点）
+
+#### 现象
+- v2.3.3 在 `NickelController` 控制器级别加了 `@UseGuards(ApiKeyGuard, RateLimitGuard, JwtAuthGuard)`
+- 后果：`GET /api/nickel/health` 也会强制要求 `Authorization: Bearer <token>`
+- 影响范围：负载均衡器健康探针、k8s liveness/readiness、监控告警、CLI smoke test 全部会 401
+
+#### 原因分析
+这是典型的「控制器级装饰器陷阱」：
+- 控制器级 `@UseGuards` 会无差别应用给所有方法
+- 加 guard 时只想着"业务接口都要 JWT"，却忽略了 `health` 端点的语义本质上是**基础设施层**而非**业务层**
+- 没有写针对 health 的集成测试 — 现有单测都是单元 guard 测试，没有覆盖到控制器级组装
+
+#### 修复方案
+- 把 `@UseGuards(...)` 从控制器类装饰器下放到**方法级**
+- 健康检查只挂 `ApiKeyGuard + RateLimitGuard`，**不挂 JwtAuthGuard**
+- 业务接口（recognize / spraycode / compare / history / images / delete）三个 guard 都挂
+
+```ts
+// 修复前 — 控制器级（错误）
+@Controller('api/nickel')
+@UseGuards(ApiKeyGuard, RateLimitGuard, JwtAuthGuard)
+export class NickelController { ... }
+
+// 修复后 — 方法级
+@Controller('api/nickel')
+export class NickelController {
+  @Get('health')
+  @UseGuards(ApiKeyGuard, RateLimitGuard)   // ← 不挂 JwtAuthGuard
+  async health() { ... }
+
+  @Get('history')
+  @UseGuards(ApiKeyGuard, RateLimitGuard, JwtAuthGuard)   // ← 方法级挂载
+  async getHistory() { ... }
+}
+```
+
+#### 教训
+1. **控制器级装饰器是高权限操作** — `@UseGuards` / `@UseInterceptors` / `@UsePipes` 在控制器级会作用于所有方法，加之前先问自己"每个方法都需要吗？"
+2. **端点分类先于挂载决定** — 在 controller 顶部写一行注释明确「基础设施端点 vs 业务端点」，再决定 guard
+3. **必须有端到端测试兜底** — 仅靠单元 guard 测试无法发现"挂错位置"这类集成 bug。新增 `nickel.controller.spec.ts` 用 `Reflector.get(GUARDS_METADATA, fn)` 在元数据层断言每个方法的守卫集合，防止未来回归
+
+#### 验证
+- 新增 10 个回归测试（`nickel.controller.spec.ts`）：
+  - 控制器级不应挂任何 guard（防止有人重新提到类上）
+  - 7 个业务方法都必须包含 `JwtAuthGuard`
+  - `/health` 不应包含 `JwtAuthGuard`、但仍包含 `ApiKeyGuard + RateLimitGuard`
+- 测试结果：13 套件 / 175 用例全部通过（+10 用例）
+
+---
+
+### 🐛 问题 2（P1 — mobile 端 `localStorage` 上的 API Key 死代码）
+
+#### 现象
+- v2.3.3 commit message 声称"移动端 API Key 加密存储（Capacitor Preferences）"
+- 但 `mobile/src/api/request.ts:35` 实际是 `localStorage.getItem('markapp_api_key')`
+- 全项目搜索 `markapp_api_key` 只此一处，**没有任何 store 或 UI 写入过**
+- 结果：这段代码永远不会读到任何值，属于**死代码** + **误导性 commit 描述**
+
+#### 原因分析
+两个独立的失误叠在一起：
+1. 在 `request.ts` 留了一个「兜底兼容未登录场景的机器调用」fallback，但从未配套实现「机器调用场景」的入口
+2. commit 描述描述了「加密存储」的愿景，但实际代码仍是 raw localStorage，描述与实现脱节
+
+这是 v2.3.2 强调过的"消除死代码"主题的同类问题 — commit 时没核对「代码与描述一致性」。
+
+#### 修复方案
+直接删除 fallback 分支：
+
+```ts
+// 修复前
+request.interceptors.request.use((config) => {
+  const token = authToken.get()
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`
+  }
+  // ← 这段是死代码
+  const apiKey = localStorage.getItem('markapp_api_key')
+  if (apiKey) {
+    config.headers['x-api-key'] = apiKey
+  }
+  return config
+})
+
+// 修复后
+request.interceptors.request.use((config) => {
+  const token = authToken.get()
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`
+  }
+  return config
+})
+```
+
+服务端的 `ApiKeyGuard` 保留 — 它仍然是机器到机器调用的合法路径，只是入口由后端 `API_KEY` 环境变量管控，不在前端做这件事。
+
+#### 教训
+1. **commit message 是契约** — 写"做了什么"时必须与代码逐字对照；如果做不到，宁可不写这种修饰
+2. **找不到写入方的读取代码就是死代码** — 写 fallback 时必须反向追问"谁会写这个 key？"；没人写就删
+3. **后端的能力不等于前端的入口** — `ApiKeyGuard` 是后端的事，前端不必模仿；后端 + 环境变量 + 运维发 key 是正确的机器到机器路径
+
+---
+
+### 🐛 问题 3（P2 — `sessionStorage` 用法缺乏文档说明）
+
+#### 现象
+- `mobile/src/views/HistoryView.vue:140/144` 与 `ResultView.vue:72/77` 使用 `sessionStorage.markapp_detail` 传递详情数据
+- v2.3.3 引入 `useStorage` 抽象把 token/user/apiKey 都统一管了，sessionStorage 成了"漏网之鱼"
+- 没有人知道 sessionStorage 是登录态外的合法用途，还是漏迁移
+
+#### 原因分析
+- sessionStorage 在前端确实有它的合理用途（一次性跨路由传 snapshot、与 tab 生命周期对齐、跨 tab 不共享）
+- 但项目的 DEVLOG 强调「统一存储抽象到 `useStorage`」，没有交代「哪些场景仍用原生 sessionStorage 是合理的」
+- 缺乏注释 → 下次有人看到 sessionStorage 会以为这是漏迁移的死代码，或者错误的"我会继续补充迁移"
+
+#### 修复方案
+**不动代码，只加注释** — sessionStorage 的 usage 在这里（detail-passing）就是对的：
+
+```ts
+// HistoryView.vue — viewDetail() 降级路径
+} catch (e) {
+  // 详情拉取失败时降级：用列表 record 数据直接跳转（ResultView 用它兜底渲染）
+  // sessionStorage 仅用于跨路由传一次性 detail snapshot，非登录态/持久化数据
+  sessionStorage.setItem('markapp_detail', JSON.stringify(record))
+  router.push('/result/' + record.id)
+}
+
+// ResultView.vue — onMounted()
+onMounted(async () => {
+  // 读取 HistoryView 跳转前注入的详情快照（tab 切换/路由参数丢失时不重新拉取）
+  // 仅 detail-passing 用途，不承载登录态或跨标签页持久化（统一由 storage 抽象处理）
+  const cached = sessionStorage.getItem('markapp_detail')
+  if (cached) { ... }
+})
+```
+
+#### 教训
+1. **抽象统一 ≠ 删除所有原生 API** — sessionStorage/localStorage/cookie/IndexedDB 各有适用场景，全替换会失去合理差异化
+2. **看似不一致的代码要写明「为什么不一致」** — 一行注释比 10 行 PR 描述都有效，因为它刻在代码现场
+3. **架构原则要"双重声明"** — DEVLOG 写一次，代码注释写一次；前者面向阅读，后者面向维护
+
+---
+
+### 📊 本次提交统计
+
+| 文件 | 变更 |
+|------|------|
+| `backend/src/nickel/nickel.controller.ts` | 控制器级 `@UseGuards` 下放到方法级，health 不挂 JwtAuthGuard |
+| `backend/src/nickel/nickel.controller.spec.ts` | 新增（10 个回归测试） |
+| `mobile/src/api/request.ts` | 删除 `markapp_api_key` 死代码分支 |
+| `mobile/src/views/HistoryView.vue` | sessionStorage 加注释 |
+| `mobile/src/views/ResultView.vue` | sessionStorage 加注释 |
+| `DEVLOG.md` | 本节 |
+
+### ✅ 验证
+- 后端 `npm test`：**13 套件 / 175 用例**全部通过（+10 用例）
+- 后端 `npm run build`：通过
+- 前端 `npx vue-tsc --noEmit`：通过
+- 前端 `npm run build`：通过

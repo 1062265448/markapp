@@ -25,8 +25,13 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { Response } from 'express';
 import * as fs from 'fs';
 
+/**
+ * 业务接口守卫采用"方法级"而非控制器级挂载：
+ * - 健康检查 /health 不需要登录（监控探针/负载均衡器友好）
+ * - 业务接口 /recognize /spraycode /compare /history 需要 JWT
+ * - 守卫顺序：ApiKeyGuard → RateLimitGuard → JwtAuthGuard（先外部后内部）
+ */
 @Controller('api/nickel')
-@UseGuards(ApiKeyGuard, RateLimitGuard, JwtAuthGuard)
 export class NickelController {
   private readonly logger = new Logger(NickelController.name);
 
@@ -40,6 +45,7 @@ export class NickelController {
    */
   @Post('recognize')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(ApiKeyGuard, RateLimitGuard, JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file'))
   async recognize(
     @UploadedFile() file: Express.Multer.File,
@@ -60,6 +66,7 @@ export class NickelController {
    */
   @Post('spraycode')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(ApiKeyGuard, RateLimitGuard, JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file'))
   async recognizeSpraycode(@UploadedFile() file: Express.Multer.File) {
     return this.nickelService.recognizeSpraycode({
@@ -75,6 +82,7 @@ export class NickelController {
    */
   @Post('compare')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(ApiKeyGuard, RateLimitGuard, JwtAuthGuard)
   @UseInterceptors(FilesInterceptor('files', 2))
   async compare(
     @UploadedFiles() files: Express.Multer.File[],
@@ -110,6 +118,7 @@ export class NickelController {
    * GET /api/nickel/history - 历史记录列表（分页）
    */
   @Get('history')
+  @UseGuards(ApiKeyGuard, RateLimitGuard, JwtAuthGuard)
   async getHistory(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -131,6 +140,7 @@ export class NickelController {
    * GET /api/nickel/history/:id - 记录详情
    */
   @Get('history/:id')
+  @UseGuards(ApiKeyGuard, RateLimitGuard, JwtAuthGuard)
   async getRecordDetail(@Param('id') id: string) {
     const data = await this.historyService.getRecordDetail(id);
 
@@ -144,8 +154,10 @@ export class NickelController {
 
   /**
    * GET /api/nickel/images/:recordId/:imageType - 获取图片
+   * 需要登录：图片属于用户对比记录，是私有资源
    */
   @Get('images/:recordId/:imageType')
+  @UseGuards(ApiKeyGuard, RateLimitGuard, JwtAuthGuard)
   async getImage(
     @Param('recordId') recordId: string,
     @Param('imageType') imageType: string,
@@ -174,6 +186,7 @@ export class NickelController {
    * DELETE /api/nickel/history/:id - 删除记录
    */
   @Delete('history/:id')
+  @UseGuards(ApiKeyGuard, RateLimitGuard, JwtAuthGuard)
   async deleteRecord(@Param('id') id: string) {
     await this.historyService.deleteRecord(id);
 
@@ -187,8 +200,11 @@ export class NickelController {
 
   /**
    * GET /api/nickel/health - 健康检查
+   * 故意不挂 JwtAuthGuard — 监控探针、负载均衡器、smoke test 通常无 token
+   * 仍受 ApiKeyGuard + RateLimitGuard 保护，避免被滥用
    */
   @Get('health')
+  @UseGuards(ApiKeyGuard, RateLimitGuard)
   async health() {
     return this.nickelService.health();
   }

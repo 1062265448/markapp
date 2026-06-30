@@ -141,6 +141,8 @@ const viewDetail = async (record: HistoryRecord) => {
       router.push('/result/' + record.id)
     }
   } catch (e) {
+    // 详情拉取失败时降级：用列表 record 数据直接跳转（ResultView 用它兜底渲染）
+    // sessionStorage 仅用于跨路由传一次性 detail snapshot，非登录态/持久化数据
     sessionStorage.setItem('markapp_detail', JSON.stringify(record))
     router.push('/result/' + record.id)
   }

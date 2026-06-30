@@ -5,8 +5,9 @@ import {
   OcrMeta,
   CompareResultResponse,
   SpraycodeResultResponse,
+  SpraycodeResult,
+  NickelLabelData,
 } from './types/nickel.types';
-import { WORKSHOP_MAP } from './types/nickel.types';
 import { ImagePreprocessService } from '../common/services/image-preprocess.service';
 import { LabelOcrService } from '../common/services/label-ocr.service';
 import { RuleCheckerService } from '../common/services/rule-checker.service';
@@ -28,13 +29,20 @@ export class NickelService {
   ) {}
 
   /**
-   * 识别镍板标签图片（本地OCR + 条码扫描）
+   * 识别镍板标签图片（v2.3.6：条码优先）
+   *
+   * 流程：
+   * 1. 图像预处理
+   * 2. labelOcrService 走条码解析路径，已经一次完成所有字段填充
+   * 3. 规则校验（基于条码解析出来的 batchNo/packNo/netWeight/productionDate）
+   * 4. 置信度评分
+   * 5. 返回
    */
   async recognize(
     file: { buffer: Buffer; mimetype: string; size: number },
     barcode?: string,
   ): Promise<RecognitionResult> {
-    const ocrMeta: OcrMeta = {
+    const startMeta: OcrMeta = {
       engine: 'rapid-ocr + zxing-cpp',
       ocrLatency: 0,
       barcodeLatency: 0,
@@ -59,79 +67,37 @@ export class NickelService {
       // 1. 图像预处理
       const originalImage = await this.imagePreprocessService.preprocess(file.buffer);
 
-      // 2. OCR + 条码扫描识别标签
-      const { labelData: rawResult, _ocrMeta } = await this.labelOcrService.recognizeLabel(originalImage, barcode);
-      Object.assign(ocrMeta, _ocrMeta);
-
-      // OCR 识别结果为空时抛出错误
-      const hasAnyField = Object.entries(rawResult).some(
-        ([key, val]) => !key.startsWith('_') && val !== null && val !== undefined && val !== '',
+      // 2. OCR + 条码扫描（v2.3.6：条码优先 — labelOcr 内部完成所有字段填充）
+      const { labelData: rawResult, barcodeParsed, _ocrMeta } = await this.labelOcrService.recognizeLabel(
+        originalImage,
+        barcode,
       );
-      if (!hasAnyField) {
-        throw new BadRequestException('识别失败: OCR未识别到任何标签字段');
-      }
+      Object.assign(startMeta, _ocrMeta);
 
-      // 3. 确定条形码
-      const finalBarcode = barcode || rawResult.barcode || undefined;
+      // 3. 条码驱动字段已全部填好。仅在用户未传 barcode 时使用解析出的码做下游
+      const effectiveBarcode = rawResult.barcode ?? undefined;
 
-      // 4. 自动纠正
-      const { corrected, corrections, correctedBarcode } = this.ruleCheckerService.autoCorrect(rawResult, finalBarcode);
-      const effectiveBarcode = correctedBarcode || finalBarcode;
+      // 4. 自动纠正（针对条码反推出的规范化字段通常 no-op）
+      const { corrected, corrections } = this.ruleCheckerService.autoCorrect(rawResult, effectiveBarcode);
 
-      // 5. 条码解析后补充 productName/brand
-      let barcodeParsed: any = null;
-      if (effectiveBarcode) {
-        const parsed = this.barcodeParserService.parse(effectiveBarcode);
-        if (parsed && parsed.parsed) {
-          // 如果纠正后 productName 仍为空，从条码车间代码推导
-          if (!corrected.productName && parsed.workshopCode) {
-            const workshopName = WORKSHOP_MAP[parsed.workshopCode] || '';
-            const parts = workshopName.split('-');
-            corrected.productName = parts.length > 1 ? parts[parts.length - 1] : workshopName;
-          }
+      // 5. 规则校验（基于条码反推字段）
+      const checkResults = this.ruleCheckerService.check(corrected, effectiveBarcode);
 
-          const productionDateCode = parsed.productionDate
-            ? parsed.productionDate.replace(/\D/g, '').slice(2)
-            : '';
-          barcodeParsed = {
-            barcode: parsed.barcode,
-            prefix: parsed.prefix,
-            productCategoryCode: parsed.productCategoryCode,
-            productGradeCode: parsed.productGradeCode,
-            productionDateCode: parsed.productionDateCode,
-            productionDate: parsed.productionDate,
-            workshopCode: parsed.workshopCode,
-            workshopName: parsed.workshopName,
-            batchNoSuffix: parsed.batchNoSuffix,
-            batchNoSuffixLetter: parsed.batchNoSuffixLetter,
-            packCode: parsed.packCode,
-            expectedPackNo: parsed.expectedPackNo,
-            netWeightEncoded: parsed.netWeightEncoded,
-            expectedNetWeight: parsed.expectedNetWeight,
-            parsed: parsed.parsed,
-            message: parsed.message,
-          };
-        }
-      }
+      // 6. 统计
+      const errorCount = checkResults.filter((r) => r.severity === 'error').length;
+      const warningCount = checkResults.filter((r) => r.severity === 'warning').length;
+      const allPassed = checkResults.every((r) => r.passed);
 
-      // 6. 硬编码默认值（OCR 未识别时补充）
-      if (!corrected.brand) corrected.brand = '金川';
-      if (!corrected.standard) corrected.standard = 'GB/T 6516-2025';
-      if (!corrected.address) corrected.address = '甘肃省金昌市金川区北京路10号';
-      if (!corrected.weightBy) corrected.weightBy = '按净重计价';
-
-      // 7. 规则校验
-      const checkResults = this.ruleCheckerService.check(corrected, effectiveBarcode || undefined);
-
-      // 8. 统计
-      const errorCount = checkResults.filter(r => r.severity === 'error').length;
-      const warningCount = checkResults.filter(r => r.severity === 'warning').length;
-      const allPassed = checkResults.every(r => r.passed);
-
-      // 9. 置信度
+      // 7. 置信度（基于条码反推的规范化结果，扣分维度更少）
       const confidence = this.confidenceService.calculate(corrected, corrections, checkResults, barcodeParsed);
 
-      // 10. 返回结果
+      // 8. 消息文案：优先展示 warning 给用户友好提示
+      const message = rawResult._warning
+        ? rawResult._warning
+        : allPassed
+          ? '识别成功，所有字段校验通过'
+          : `识别完成，发现 ${errorCount} 个错误和 ${warningCount} 个警告`;
+
       return {
         success: true,
         data: {
@@ -144,11 +110,9 @@ export class NickelService {
           errorCount,
           warningCount,
           confidence,
-          _ocrMeta: ocrMeta,
+          _ocrMeta: startMeta,
         },
-        message: allPassed
-          ? '识别成功，所有字段校验通过'
-          : `识别完成，发现 ${errorCount} 个错误和 ${warningCount} 个警告`,
+        message,
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
@@ -166,7 +130,7 @@ export class NickelService {
           errorCount: 1,
           warningCount: 0,
           confidence: null,
-          _ocrMeta: ocrMeta,
+          _ocrMeta: startMeta,
         },
         message: `识别失败: ${(error as Error).message}`,
         timestamp: new Date().toISOString(),
@@ -175,9 +139,11 @@ export class NickelService {
   }
 
   /**
-   * 喷码OCR识别
+   * 喷码 OCR 识别（v2.3.6：条码优先）
    */
-  async recognizeSpraycode(file: { buffer: Buffer; mimetype: string; size: number }): Promise<SpraycodeResultResponse> {
+  async recognizeSpraycode(
+    file: { buffer: Buffer; mimetype: string; size: number },
+  ): Promise<SpraycodeResultResponse> {
     if (!file) throw new BadRequestException('请上传图片文件');
     if (!file.buffer || !file.mimetype || file.size === undefined) {
       throw new BadRequestException('无效的文件上传格式');
@@ -186,7 +152,7 @@ export class NickelService {
       throw new BadRequestException(`不支持的文件类型: ${file.mimetype}`);
     }
     if (!this.imagePreprocessService.validateImageSize(file.size, 10)) {
-      throw new BadRequestException('文件大小不能超过 10MB');
+      throw new BadRequestException('喷码图片大小不能超过 10MB');
     }
 
     const spraycodeResult = await this.spraycodeOcrService.recognizeSpraycode(file.buffer);
@@ -194,18 +160,21 @@ export class NickelService {
     return {
       success: true,
       data: spraycodeResult,
-      message: '喷码识别成功',
+      message: spraycodeResult._warning ?? '喷码识别成功',
       timestamp: new Date().toISOString(),
     };
   }
 
   /**
-   * 喷码对比
+   * 喷码对比（v2.3.6：仅对比条码能映射的字段）
+   *
+   * 字段集：batchNo / packNo / productionDate / netWeight
+   * 注意：userBarcode/labelFile 仍可传入，用于驱动标签侧条码识别
    */
   async compare(
-    sprayFile: { buffer: Buffer; mimetype: string; size: number },
-    labelFile?: { buffer: Buffer; mimetype: string; size: number },
-    labelResult?: any,
+    sprayFile: { buffer: Buffer; mimetype: string; size: number; originalname?: string },
+    labelFile?: { buffer: Buffer; mimetype: string; size: number; originalname?: string },
+    _labelBarcode?: string,
   ): Promise<CompareResultResponse> {
     // 校验喷码图片
     if (!sprayFile) throw new BadRequestException('请上传喷码图片');
@@ -231,44 +200,41 @@ export class NickelService {
         throw new BadRequestException('标签图片大小不能超过 10MB');
       }
     }
+
+    // 1. 喷码侧：条码优先
     const sprayCodeData = await this.spraycodeOcrService.recognizeSpraycode(sprayFile.buffer);
 
-    let labelData: any = null;
+    // 2. 标签侧：如有标签图走 LabelOcrService；否则用 labelResult 透传
+    let labelData: NickelLabelData | null = null;
     if (labelFile) {
-      const labelResultData = await this.recognize(labelFile);
-      if (labelResultData.success && labelResultData.data.correctedData) {
-        labelData = {
-          packNo: { cn: labelResultData.data.correctedData.packNo, en: labelResultData.data.correctedData.packNo },
-          batchNo: { cn: labelResultData.data.correctedData.batchNo, en: labelResultData.data.correctedData.batchNo },
-          netWeight: { cn: labelResultData.data.correctedData.netWeight, en: labelResultData.data.correctedData.netWeight },
-          productionDate: { cn: labelResultData.data.correctedData.productionDate, en: labelResultData.data.correctedData.productionDate },
-        };
+      const labelResult = await this.recognize(labelFile);
+      if (labelResult.success && labelResult.data.correctedData) {
+        labelData = labelResult.data.correctedData;
       }
-    } else if (labelResult) {
-      labelData = labelResult;
     }
 
-    const compareResults = this.spraycodeCompareService.compare(sprayCodeData as any, labelData as any);
+    // 3. 字段级对比（仅 4 个字段：batchNo/packNo/productionDate/netWeight）
+    const compareResults = this.spraycodeCompareService.compare(
+      sprayCodeData as SpraycodeResult,
+      labelData,
+    );
     const summary = this.spraycodeCompareService.summarize(compareResults);
 
     return {
       success: true,
-      data: { compareResults, summary, sprayCodeData, labelCodeData: labelData },
+      data: { compareResults, summary, sprayCodeData, labelCodeData: labelData as any },
       message: '喷码对比完成',
       timestamp: new Date().toISOString(),
     };
   }
 
   /**
-   * 健康检查（返回标准响应格式）
+   * 健康检查
    */
   health(): { success: true; data: { status: string; version: string }; message: string; timestamp: string } {
     return {
       success: true,
-      data: {
-        status: 'ok',
-        version: '2.0.0',
-      },
+      data: { status: 'ok', version: '2.0.0' },
       message: '服务运行正常',
       timestamp: new Date().toISOString(),
     };

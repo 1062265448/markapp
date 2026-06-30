@@ -1,20 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { NickelConfigService } from '../../config/config.service';
-import { NickelLabelData, OcrMeta } from '../../nickel/types/nickel.types';
+import { NickelLabelData, OcrMeta, BarcodeParsed } from '../../nickel/types/nickel.types';
 import { WORKSHOP_MAP } from '../../nickel/types/nickel.types';
 import { BarcodeParserService } from './barcode-parser.service';
 import {
   callOcrFull,
-  normalizeDigits,
-  normalizeBatchNo,
-  normalizeDate,
-  normalizeWeight,
   pickBestBarcode,
+  normalize25DigitBarcode,
 } from './ocr-utils';
 
-// LabelOcrService 返回的完整结果
+// LabelOcrService 返回的完整结果（v2.3.6 起以条码为主）
 export interface LabelOcrResult {
   labelData: NickelLabelData;
+  barcodeParsed: BarcodeParsed | null;
   _ocrMeta: OcrMeta;
 }
 
@@ -30,65 +28,121 @@ export class LabelOcrService {
   }
 
   /**
-   * 识别标签图片 — 调用本地 OCR 服务获取文本 + 条码
+   * v2.3.6 重构：识别标签图片
+   *
+   * 数据源优先级：
+   * 1. 用户手动输入的 barcode（userBarcode）— 最高优先
+   * 2. zxing-cpp 扫到的 25 位行业编码（pickBestBarcode 选最优）
+   * 3. 都没有 → 返回空数据 + _warning（不降级到 OCR 文本）
+   *
+   * OCR 文本仅作为参考信号展示在 _warning 中，不参与业务字段提取。
    */
   async recognizeLabel(imageBuffer: Buffer, userBarcode?: string): Promise<LabelOcrResult> {
     const start = Date.now();
-    console.log('[LabelOCR] 开始标签OCR识别');
+    console.log('[LabelOCR] 开始标签识别（条码优先）');
 
-    // 调用 /ocr/full 获取 OCR 文本 + 条码扫描
-    const { lines, barcodes, ocrLatencyMs, barcodeLatencyMs, barcodeCount } = await callOcrFull(imageBuffer, this.rapidOcrUrl);
+    // 调 OCR + 条码扫描
+    const { lines, barcodes, ocrLatencyMs, barcodeLatencyMs, barcodeCount } = await callOcrFull(
+      imageBuffer,
+      this.rapidOcrUrl,
+    );
 
-    // 从 OCR 文本提取所有标签字段
-    const labelData = this.extractLabelFields(lines);
+    // 选条码（用户手输优先；否则从扫出的码里挑 25 位）
+    const rawBarcode = userBarcode?.trim() || pickBestBarcode(barcodes);
+    const cleanedBarcode = rawBarcode ? normalize25DigitBarcode(rawBarcode) : null;
 
-    // 从条码扫描结果获取 barcode 字符串（用户手动输入优先）
-    const barcode = userBarcode || pickBestBarcode(barcodes);
-    if (barcode) {
-      labelData.barcode = barcode;
-    }
-
-    // 从条码推导 productName/brand（OCR 未识别时补充）
-    if (!labelData.productName && barcode) {
-      const parsed = this.barcodeParser.parse(barcode);
-      if (parsed?.parsed && parsed?.workshopCode) {
-        const workshopName = WORKSHOP_MAP[parsed.workshopCode] || '';
-        // 从 "电解一车间-电解镍" 中提取最后一段作为 productName
-        const parts = workshopName.split('-');
-        labelData.productName = parts.length > 1 ? parts[parts.length - 1] : workshopName;
-      }
-    }
-    if (!labelData.brand) labelData.brand = '金川';
-    if (!labelData.standard) labelData.standard = 'GB/T 6516-2025';
-    if (!labelData.address) labelData.address = '甘肃省金昌市金川区北京路10号';
-    if (!labelData.weightBy) labelData.weightBy = '按净重计价';
-
-    // 计算耗时
-    const totalLatency = Date.now() - start;
-
-    // 构建元数据
-    const bestBarcode = barcodes.length > 0 ? barcodes[0] : null;
-    const ocrMeta: OcrMeta = {
+    const meta: OcrMeta = {
       engine: 'rapid-ocr + zxing-cpp',
       ocrLatency: ocrLatencyMs,
       barcodeLatency: barcodeLatencyMs,
       lineCount: lines.length,
       barcodeCount,
-      barcodeFormat: bestBarcode?.format || null,
+      barcodeFormat: barcodes[0]?.format || null,
+      barcodes: barcodes.map((b) => ({ text: b.text, format: b.format })),
     };
 
-    console.log('[LabelOCR] 标签OCR识别完成，耗时:', totalLatency, 'ms，行数:', lines.length, '条码:', barcodeCount);
-    return { labelData, _ocrMeta: ocrMeta };
+    // === 失败分支：没有拿到 25 位条码 ===
+    if (!cleanedBarcode) {
+      const reason = !rawBarcode
+        ? `未扫到条码（zxing 识别出 ${barcodeCount} 个码，均非 25 位行业编码）`
+        : `条码格式无效：期望 25 位数字，实际 "${rawBarcode.slice(0, 30)}${rawBarcode.length > 30 ? '...' : ''}"`;
+      console.warn('[LabelOCR]', reason);
+      return {
+        labelData: this.emptyLabel(cleanedBarcode ? cleanedBarcode : null, reason),
+        barcodeParsed: null,
+        _ocrMeta: meta,
+      };
+    }
+
+    // === 主路径：解析 25 位行业编码 ===
+    const parsed = this.barcodeParser.parse(cleanedBarcode);
+    if (!parsed || !parsed.parsed) {
+      const reason = parsed?.message || '25 位条码解析失败';
+      console.warn('[LabelOCR]', reason, '→', cleanedBarcode);
+      return {
+        labelData: this.emptyLabel(cleanedBarcode, reason),
+        barcodeParsed: parsed,
+        _ocrMeta: meta,
+      };
+    }
+
+    // === 成功：用 BarcodeParsed 反推 labelData ===
+    const labelData = this.mapBarcodeToLabel(parsed);
+    const totalLatency = Date.now() - start;
+    console.log(
+      '[LabelOCR] 标签识别完成，耗时:',
+      totalLatency,
+      'ms, 批号:',
+      labelData.batchNo,
+      '包号:',
+      labelData.packNo,
+      '日期:',
+      labelData.productionDate,
+    );
+
+    return {
+      labelData,
+      barcodeParsed: parsed,
+      _ocrMeta: meta,
+    };
   }
 
   /**
-   * 从 OCR 文本行提取标签所有字段
-   * 在 spraycode 字段基础上扩展标签特有字段
+   * 用 BarcodeParsed 反推 NickelLabelData
+   * 业务常量（brand/standard/address/weightBy）保持硬编码配置
    */
-  private extractLabelFields(lines: Array<{ text: string; confidence: number }>): NickelLabelData {
-    const allText = lines.map(l => l.text).join('\n');
+  private mapBarcodeToLabel(p: BarcodeParsed): NickelLabelData {
+    const workshopName = WORKSHOP_MAP[p.workshopCode] || '';
+    // productName 从车间名取最后一段（如"电解一车间-电解镍" → "电解镍"）
+    const productName = workshopName.includes('-')
+      ? workshopName.split('-').slice(-1)[0]
+      : workshopName;
 
-    const result: NickelLabelData = {
+    const yearShort = p.productionDate ? p.productionDate.slice(2, 4) : '';
+    const batchNo = `${yearShort}-${p.workshopCode}-${p.batchNoSuffix}${p.batchNoSuffixLetter}`;
+
+    return {
+      productName,
+      brand: '金川',                       // 业务常量
+      standard: 'GB/T 6516-2025',          // 业务常量
+      batchNo,
+      packNo: p.expectedPackNo,
+      pieces: null,                        // 条码未编码
+      netWeight: p.expectedNetWeight,
+      grossWeight: null,                   // 条码未编码
+      productionDate: p.productionDate ?? null,
+      weightBy: '按净重计价',                // 业务常量
+      address: '甘肃省金昌市金川区北京路10号', // 业务常量
+      barcode: p.barcode,
+      _barcodeRaw: p.barcode,
+    };
+  }
+
+  /**
+   * 构造空白 label（条码失败时用）
+   */
+  private emptyLabel(barcodeRaw: string | null, reason: string): NickelLabelData {
+    return {
       productName: null,
       brand: null,
       standard: null,
@@ -100,80 +154,9 @@ export class LabelOcrService {
       productionDate: null,
       weightBy: null,
       address: null,
-      barcode: null,
+      barcode: barcodeRaw,
+      _barcodeRaw: barcodeRaw ?? undefined,
+      _warning: reason,
     };
-
-    // === 标签特有字段 ===
-
-    // 产品名称
-    const productMatch = allText.match(/(电[解积][一二三]?车间[—\-]?(?:电解|电积)镍|电解镍|电积镍)/);
-    if (productMatch) {
-      // 从 "电解一车间-电解镍" 中提取产品名
-      const p = productMatch[1];
-      const dashIdx = p.lastIndexOf('-');
-      result.productName = dashIdx >= 0 ? p.slice(dashIdx + 1) : p;
-    }
-
-    // 品牌
-    const brandMatch = allText.match(/(金川|JINCHUAN)/i);
-    if (brandMatch) result.brand = '金川';
-
-    // 标准
-    const standardMatch = allText.match(/(GB\/T\s*6516[\s\-]*\d{0,4})/i);
-    if (standardMatch) {
-      let s = standardMatch[1].replace(/\s+/g, '');
-      // 补全年份
-      if (!/\d{4}$/.test(s)) s += '-2025';
-      result.standard = s;
-    }
-
-    // 地址
-    const addrMatch = allText.match(/(甘肃省[一-龥]+(?:路|道|街|号)\S*)/);
-    if (addrMatch) result.address = addrMatch[1].trim();
-
-    // 计重方式
-    const weightByMatch = allText.match(/(?:WEIGHT\s*BY|计重[:\s]*)\s*([一-龥A-Za-z\s]+)/i);
-    if (weightByMatch) {
-      result.weightBy = weightByMatch[1].trim();
-    } else if (allText.match(/按净重/)) {
-      result.weightBy = '按净重计价';
-    }
-
-    // === 喷码共有字段 ===
-
-    // 批号 — 同时匹配中文 "批号：" 和英文 "BATCH NO."
-    const batchMatch = allText.match(/批号[：:]\s*(\d{2}-\d-\d{3}[JjTtSs]?)/)
-      || allText.match(/BATCH\s*NO\.?\s*[:.]?\s*(\d{2}-\d-\d{3}[J]?)/i)
-      || allText.match(/(\d{2}-\d-\d{3}[JjTtSs]?)/);
-    if (batchMatch) result.batchNo = normalizeBatchNo(batchMatch[1]);
-
-    // 包号 — 同时匹配中文 "包号：" 和英文 "PACK NO."
-    const packMatch = allText.match(/包号[：:]\s*(\d{1,3}[JjTtSs]?)/)
-      || allText.match(/PACK\s*NO\.?\s*[:.]?\s*(\d{1,3})/i)
-      || allText.match(/PACK\s*[:.]?\s*(\d{1,3})/i);
-    if (packMatch) result.packNo = normalizeDigits(packMatch[1]);
-
-    // 日期 — 同时匹配中文 "生产日期：" 和英文 "Date:"
-    const dateMatch = allText.match(/生产日期[：:]\s*(\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2})/)
-      || allText.match(/Date\s*[:.]?\s*(\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2})/i)
-      || allText.match(/(\d{4}[-\/.]\d{2}[-\/.]\d{2})/);
-    if (dateMatch) result.productionDate = normalizeDate(dateMatch[1]);
-
-    // 净重 — 同时匹配中文 "净重(Kg)：" 和英文 "NET:"
-    const netMatch = allText.match(/净重[（(]Kg[)）][：:/]?\s*([\d,.]+)/)
-      || allText.match(/NET\s*[:.]?\s*([\d,.]+)\s*(?:Kg|KG|kg)?/i)
-      || allText.match(/NET\s*[:.]?\s*(\d+)/i);
-    if (netMatch) result.netWeight = normalizeWeight(netMatch[1]);
-
-    // 毛重
-    const grossMatch = allText.match(/Gross\s*[:.]?\s*([\d,.]+)\s*(?:Kg|KG|kg)?/i);
-    if (grossMatch) result.grossWeight = normalizeWeight(grossMatch[1]);
-
-    // 块数
-    const piecesMatch = allText.match(/PIECES\s*[:.]?\s*(\d+)/i)
-      || allText.match(/PCS\s*[:.]?\s*(\d+)/i);
-    if (piecesMatch) result.pieces = parseInt(normalizeDigits(piecesMatch[1]), 10);
-
-    return result;
   }
 }

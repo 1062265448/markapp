@@ -13,6 +13,11 @@ export interface NickelLabelData {
   address: string | null;
   barcode?: string | null;
   _fieldLabels?: Record<string, string>;
+  // === v2.3.6：条码优先架构 ===
+  /** 条码解析失败/缺失时携带的友好提示，前端可展示给用户 */
+  _warning?: string;
+  /** 原始 25 位条码字符串（含分隔符），便于排查 */
+  _barcodeRaw?: string;
 }
 
 // 规则检查结果
@@ -43,6 +48,9 @@ export interface OcrMeta {
   lineCount: number;          // OCR 识别行数
   barcodeCount: number;       // 扫描到的条码数
   barcodeFormat: string | null; // 条码格式: "CODE_128" | "QR_CODE" | etc.
+  // === v2.3.6：多条码支持 ===
+  /** 全部扫到的条码明细（text + format），用于排查；正常路径只用 pickBest */
+  barcodes?: Array<{ text: string; format: string }>;
 }
 
 // 条形码解析结果
@@ -101,6 +109,9 @@ export interface SpraycodeResult {
   grossWeight: number | null;
   pieces: number | null;
   _ocrMeta?: OcrMeta;
+  // === v2.3.6：条码优先架构 ===
+  _warning?: string;
+  _barcodeRaw?: string;
 }
 
 // 喷码对比结果
@@ -137,6 +148,9 @@ export interface SpraycodeData {
   grossWeight: number | null;
   pieces: number | null;
   _ocrMeta?: OcrMeta;
+  // === v2.3.6：条码优先架构 ===
+  _warning?: string;
+  _barcodeRaw?: string;
 }
 
 // API响应格式

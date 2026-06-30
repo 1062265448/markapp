@@ -9,7 +9,7 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 from rapidocr_onnxruntime import RapidOCR
 from PIL import Image
-from zxingcpp import read_barcode, BarcodeFormat
+from zxingcpp import read_barcode, read_barcodes, BarcodeFormat
 
 logger = logging.getLogger("ocr-service")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -112,18 +112,28 @@ def _run_ocr(image: Image.Image) -> dict:
 
 
 def _scan_barcodes(image: Image.Image) -> dict:
-    """执行 zxing-cpp 条码扫描"""
+    """执行 zxing-cpp 条码扫描（支持多条码）
+
+    使用默认参数：try_rotate=True（自动旋转识别）/ try_downscale=True（降采样识别）
+    / try_invert=True（深色背景反相识别）— 实景照片容错最佳。
+    注：is_pure=False — 该参数仅适用于程序生成的纯净条码图，真实场景反会漏识。
+    """
     start = time.perf_counter()
-    results = read_barcode(image)
+    # read_barcodes (复数) 返回 list，支持多条码同时识别
+    results = read_barcodes(image)
     latency = time.perf_counter() - start
 
     barcodes = []
     if results:
-        format_name = BARCODE_FORMAT_NAMES.get(results.format, str(results.format))
-        barcodes.append({
-            "text": results.text,
-            "format": format_name,
-        })
+        # 兼容 read_barcode (单数) 返回单个 Barcode | None 的情况
+        if not isinstance(results, list):
+            results = [results]
+        for r in results:
+            format_name = BARCODE_FORMAT_NAMES.get(r.format, str(r.format))
+            barcodes.append({
+                "text": r.text,
+                "format": format_name,
+            })
 
     return {
         "barcodes": barcodes,

@@ -139,7 +139,8 @@ export class RuleCheckerService {
     if (!standard) {
       return { field: 'standard', ruleType: 'format', passed: false, severity: 'warning', original: null, message: '标准号未识别' };
     }
-    if (/^GB\/T6516-\d{4}$/.test(standard)) {
+    // v2.3.6：支持 GB/T6516-2025 与 GB/T 6516-2025（兼容空格）
+    if (/^GB\/T\s?6516-\d{4}$/.test(standard)) {
       return { field: 'standard', ruleType: 'format', passed: true, severity: 'info', message: '标准号格式正确' };
     }
     return {
@@ -206,6 +207,11 @@ export class RuleCheckerService {
       return { field: 'brand', ruleType: 'consistency', passed: false, severity: 'warning', original: null, message: '产品名称或品牌未识别' };
     }
 
+    // v2.3.6：业务常量场景 — 中文品牌"金川"或英文品牌都接受
+    if (brand === '金川') {
+      return { field: 'brand', ruleType: 'consistency', passed: true, severity: 'info', message: '品牌（中文常量）校验通过' };
+    }
+
     const expectedBrand = productName.includes('电积')
       ? 'JINTUO GRADE 1(EW)'
       : 'JINTUO GRADE 1';
@@ -223,6 +229,10 @@ export class RuleCheckerService {
   checkEnglishCase(brand: string | null): CheckResult {
     if (!brand) {
       return { field: 'brand', ruleType: 'format', passed: false, severity: 'warning', original: brand, message: '品牌未识别' };
+    }
+    // v2.3.6：中文常量不算"英文大小写错误"
+    if (/^[一-鿿]+$/.test(brand)) {
+      return { field: 'brand', ruleType: 'format', passed: true, severity: 'info', message: '品牌（中文字符）跳过英文大小写检查' };
     }
     const englishPart = brand.replace(/[（）()]/g, '');
     const upperEnglish = englishPart.toUpperCase();
@@ -679,10 +689,10 @@ export class RuleCheckerService {
       .replace(/-2O25/g, '-2025')
       .replace(/-2o25/g, '-2025');
 
-    if (/^GB\/T6516-\d{4}$/.test(fixed)) return fixed;
+    if (/^GB\/T\s?6516-\d{4}$/.test(fixed)) return fixed;
 
     const expected = 'GB/T6516-2025';
-    if (this._levenshtein(fixed.toUpperCase(), expected) <= 2) return expected;
+    if (this._levenshtein(fixed.toUpperCase().replace(/\s+/g, ''), expected) <= 2) return expected;
 
     return fixed;
   }

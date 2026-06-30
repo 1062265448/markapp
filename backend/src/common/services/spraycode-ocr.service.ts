@@ -4,11 +4,8 @@ import { OcrMeta } from '../../nickel/types/nickel.types';
 import { BarcodeParserService } from './barcode-parser.service';
 import {
   callOcrFull,
-  normalizeDigits,
-  normalizeBatchNo,
-  normalizeDate,
-  normalizeWeight,
   pickBestBarcode,
+  normalize25DigitBarcode,
 } from './ocr-utils';
 
 interface SpraycodeFields {
@@ -19,6 +16,8 @@ interface SpraycodeFields {
   grossWeight: number | null;
   pieces: number | null;
   _ocrMeta?: OcrMeta;
+  _warning?: string;
+  _barcodeRaw?: string;
 }
 
 @Injectable()
@@ -33,102 +32,90 @@ export class SpraycodeOcrService {
   }
 
   /**
-   * 识别喷码图片 - 调用本地 OCR 服务（RapidOCR + 条码扫描）
+   * v2.3.6 重构：识别喷码图片
+   *
+   * 数据源：25 位行业编码条形码（zxing-cpp 扫描）
+   * 失败处理：直接抛 400，让用户重拍；OCR 文本不用
+   *
+   * 注意：喷码图通常不含完整条形码（喷码是钢印/激光打标，不是仪器上的条码）。
+   * 这是喷码 OCR 全空的根本原因 — 当前架构需要在喷码图也采集到 25 位条码才能识别。
+   * 若用户的喷码区域没有条形码，正确做法应该是让用户重新拍摄包含条形码的喷码图。
    */
   async recognizeSpraycode(imageBuffer: Buffer): Promise<SpraycodeFields> {
     const start = Date.now();
-    console.log('[SpraycodeOCR] 开始喷码识别');
+    console.log('[SpraycodeOCR] 开始喷码识别（条码优先）');
 
-    // 调用共享 OCR 工具（主引擎 + 降级）
-    const { lines, barcodes, ocrLatencyMs, barcodeLatencyMs, barcodeCount } = await callOcrFull(imageBuffer, this.rapidOcrUrl);
+    const { lines, barcodes, ocrLatencyMs, barcodeLatencyMs, barcodeCount } = await callOcrFull(
+      imageBuffer,
+      this.rapidOcrUrl,
+    );
 
-    if (lines.length === 0) {
-      throw new Error('所有OCR引擎均识别失败');
-    }
+    const rawBarcode = pickBestBarcode(barcodes);
+    const cleanedBarcode = rawBarcode ? normalize25DigitBarcode(rawBarcode) : null;
 
-    const fields = this._extractFields(lines);
-    const latency = Date.now() - start;
-
-    // 如果有条码扫描结果且 OCR 文本未提取到批号/包号，从条码补充
-    if (barcodes.length > 0) {
-      const bestBarcode = pickBestBarcode(barcodes);
-      if (bestBarcode) {
-        const parsed = this.barcodeParser.parse(bestBarcode);
-        if (parsed && parsed.parsed) {
-          // 条码结果作为补充（OCR 文本提取优先）
-          if (!fields.batchNo) {
-            const yearShort = parsed.productionDate ? parsed.productionDate.slice(2, 4) : '';
-            fields.batchNo = `${yearShort}-${parsed.workshopCode}-${parsed.batchNoSuffix}`;
-          }
-          if (!fields.packNo) fields.packNo = parsed.expectedPackNo;
-          if (!fields.productionDate && parsed.productionDate) fields.productionDate = parsed.productionDate;
-          if (!fields.netWeight && parsed.expectedNetWeight) fields.netWeight = parsed.expectedNetWeight;
-        }
-      }
-    }
-
-    const engine = barcodeCount > 0 ? 'rapid-ocr + zxing-cpp' : 'rapid-ocr';
-    fields._ocrMeta = {
-      engine,
+    const meta: OcrMeta = {
+      engine: 'rapid-ocr + zxing-cpp',
       ocrLatency: ocrLatencyMs,
       barcodeLatency: barcodeLatencyMs,
       lineCount: lines.length,
       barcodeCount,
-      barcodeFormat: barcodes.length > 0 ? barcodes[0].format : null,
+      barcodeFormat: barcodes[0]?.format || null,
+      barcodes: barcodes.map((b) => ({ text: b.text, format: b.format })),
     };
 
-    console.log('[SpraycodeOCR] 字段提取完成，耗时:', latency, 'ms');
-    return fields;
-  }
+    // === 失败分支：扫码结果异常（不抛异常，让上层决定） ===
+    if (!cleanedBarcode) {
+      const reason = !rawBarcode
+        ? `未扫到条码（zxing 识别出 ${barcodeCount} 个码，均非 25 位行业编码）`
+        : `条码格式无效：期望 25 位数字，实际长度 ${rawBarcode.replace(/\D/g, '').length}`;
+      console.warn('[SpraycodeOCR]', reason);
+      return {
+        batchNo: null,
+        packNo: null,
+        productionDate: null,
+        netWeight: null,
+        grossWeight: null,
+        pieces: null,
+        _barcodeRaw: rawBarcode ?? undefined,
+        _warning: rawBarcode
+          ? '喷码图条码格式无效，请重新拍摄'
+          : '喷码图未检测到 25 位行业编码条码，请重新拍摄',
+        _ocrMeta: meta,
+      };
+    }
 
-  /**
-   * 从OCR文本行提取喷码字段
-   */
-  private _extractFields(lines: Array<{ text: string; confidence: number }>): SpraycodeFields {
-    const allText = lines.map(l => l.text).join('\n');
+    const parsed = this.barcodeParser.parse(cleanedBarcode);
+    if (!parsed || !parsed.parsed) {
+      console.warn('[SpraycodeOCR] 25 位条码解析失败:', parsed?.message, '→', cleanedBarcode);
+      return {
+        batchNo: null,
+        packNo: null,
+        productionDate: null,
+        netWeight: null,
+        grossWeight: null,
+        pieces: null,
+        _barcodeRaw: cleanedBarcode,
+        _warning: `喷码条码解析失败：${parsed?.message || '未知错误'}`,
+        _ocrMeta: meta,
+      };
+    }
 
-    const result: SpraycodeFields = {
-      batchNo: null,
-      packNo: null,
-      productionDate: null,
-      netWeight: null,
-      grossWeight: null,
-      pieces: null,
+    // === 成功：用 BarcodeParsed 反推喷码字段 ===
+    const yearShort = parsed.productionDate ? parsed.productionDate.slice(2, 4) : '';
+    const batchNo = `${yearShort}-${parsed.workshopCode}-${parsed.batchNoSuffix}${parsed.batchNoSuffixLetter}`;
+
+    const latency = Date.now() - start;
+    console.log('[SpraycodeOCR] 喷码识别完成，耗时:', latency, 'ms, 批号:', batchNo);
+
+    return {
+      batchNo,
+      packNo: parsed.expectedPackNo,
+      productionDate: parsed.productionDate,
+      netWeight: parsed.expectedNetWeight,
+      grossWeight: null, // 条码无
+      pieces: null, // 条码无
+      _barcodeRaw: parsed.barcode,
+      _ocrMeta: meta,
     };
-
-    // 批号
-    const batchMatch = allText.match(/批号[：:]\s*(\d{2}-\d-\d{3}[JjTtSs]?)/)
-      || allText.match(/BATCH\s*NO\.?\s*[:.]?\s*(\d{2}-\d-\d{3}[J]?)/i)
-      || allText.match(/(\d{2}-\d-\d{3}[JjTtSs]?)/);
-    if (batchMatch) result.batchNo = normalizeBatchNo(batchMatch[1]);
-
-    // 包号 — 同时匹配中文 "包号：" 和英文 "PACK NO."
-    const packMatch = allText.match(/包号[：:]\s*(\d{1,3}[JjTtSs]?)/)
-      || allText.match(/PACK\s*NO\.?\s*[:.]?\s*(\d{1,3})/i)
-      || allText.match(/PACK\s*[:.]?\s*(\d{1,3})/i);
-    if (packMatch) result.packNo = normalizeDigits(packMatch[1]);
-
-    // 日期 — 同时匹配中文 "生产日期：" 和英文 "Date:"
-    const dateMatch = allText.match(/生产日期[：:]\s*(\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2})/)
-      || allText.match(/Date\s*[:.]?\s*(\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2})/i)
-      || allText.match(/(\d{4}[-\/.]\d{2}[-\/.]\d{2})/);
-    if (dateMatch) result.productionDate = normalizeDate(dateMatch[1]);
-
-    // 净重 — 同时匹配中文 "净重(Kg)：" 和英文 "NET:"
-    const netMatch = allText.match(/净重[（(]Kg[)）][：:/]?\s*([\d,.]+)/)
-      || allText.match(/NET\s*[:.]?\s*([\d,.]+)\s*(?:Kg|KG|kg)?/i)
-      || allText.match(/NET\s*[:.]?\s*(\d+)/i);
-    if (netMatch) result.netWeight = normalizeWeight(netMatch[1]);
-
-    // 毛重
-    const grossMatch = allText.match(/Gross\s*[:.]?\s*([\d,.]+)\s*(?:Kg|KG|kg)?/i);
-    if (grossMatch) result.grossWeight = normalizeWeight(grossMatch[1]);
-
-    // 块数
-    const piecesMatch = allText.match(/PIECES\s*[:.]?\s*(\d+)/i)
-      || allText.match(/PCS\s*[:.]?\s*(\d+)/i);
-    if (piecesMatch) result.pieces = parseInt(normalizeDigits(piecesMatch[1]), 10);
-
-    return result;
   }
 }

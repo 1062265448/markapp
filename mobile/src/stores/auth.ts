@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import axios from 'axios'
+import request from '@/api/request'
 import { storage } from '@/composables/useStorage'
 import { authToken } from '@/composables/authToken'
 
@@ -44,14 +44,14 @@ export const useAuthStore = defineStore('auth', () => {
   const verifyToken = async (): Promise<boolean> => {
     if (!token.value) return false
     try {
-      const baseURL = axios.defaults.baseURL || ''
-      const res = await axios.get<{ data: User }>(`${baseURL}/api/auth/me`, {
+      // 使用统一的 request 实例（带 baseURL + JWT 拦截器 + 响应解包）
+      const data = await request.get<User>('/api/auth/me', {
         headers: { Authorization: `Bearer ${token.value}` },
         timeout: 5000,
       })
-      if (res.data?.data) {
-        user.value = res.data.data
-        await storage.setJson(USER_KEY, res.data.data)
+      if (data) {
+        user.value = data
+        await storage.setJson(USER_KEY, data)
         return true
       }
       await clearAuth()
@@ -84,17 +84,15 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value = null
     try {
-      const baseURL = axios.defaults.baseURL || ''
-      const res = await axios.post<{ success: boolean; data: LoginApiResponse; message?: string }>(
-        `${baseURL}/api/auth/login`,
-        credentials,
-        { timeout: 10000 },
-      )
-      if (!res.data.success || !res.data.data) {
-        throw new Error(res.data.message || '登录失败')
+      // 使用统一的 request 实例 — 自动应用 baseURL、拦截器、错误归一化
+      const data = await request.post<LoginApiResponse>('/api/auth/login', credentials, {
+        timeout: 10000,
+      })
+      if (!data) {
+        throw new Error('登录失败')
       }
-      await setAuth(res.data.data)
-      return res.data.data
+      await setAuth(data)
+      return data
     } catch (e: unknown) {
       await clearAuth()
       const msg = e instanceof Error ? e.message : '登录失败'

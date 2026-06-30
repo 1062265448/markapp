@@ -75,19 +75,42 @@ export function normalizeWeight(raw: string): number | null {
 
 /**
  * 从条码扫描结果中选择最佳条码
- * 优先选择含数字条码格式（25位数字或6段空格分隔）的结果
+ * 优先选择含 25 位数字行业编码（连续或 6 段空格分隔）的结果
  */
 export function pickBestBarcode(barcodes: Array<{ text: string; format: string }>): string | null {
   if (barcodes.length === 0) return null;
 
-  // 优先选择包含 6 段或 25 位数字的条码（镍板数字条码格式）
+  // 优先：25 位行业编码（连续数字）
+  for (const b of barcodes) {
+    if (/^\d{25}$/.test(b.text.trim())) return b.text.trim();
+  }
+
+  // 次选：6 段空格分隔的数字（拼起来应等于 25 位）
+  for (const b of barcodes) {
+    const parts = b.text.trim().split(/\s+/);
+    if (parts.length === 6 && parts.join('').length === 25 && /^\d+$/.test(parts.join(''))) {
+      return b.text.trim();
+    }
+  }
+
+  // 兜底：含数字且长度 ≥ 20 的码（镍板数字码格式）
   const digitPattern = /^[\d\s]{20,}$/;
   const best = barcodes.find(b => digitPattern.test(b.text));
   if (best) return best.text.trim();
 
-  // 其次选择最长的条码
+  // 最后：选择最长的条码
   const sorted = [...barcodes].sort((a, b) => b.text.length - a.text.length);
   return sorted[0].text.trim();
+}
+
+/**
+ * 将任意条码字符串归一化为 25 位连续数字（去除所有非数字字符）
+ * 例如 "123 456 789..." → "123456789..."
+ * 解析失败返回 null（长度不是 25）
+ */
+export function normalize25DigitBarcode(raw: string): string | null {
+  const digits = raw.replace(/\D/g, '');
+  return digits.length === 25 ? digits : null;
 }
 
 /**

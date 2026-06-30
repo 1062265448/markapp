@@ -594,3 +594,114 @@ onMounted(async () => {
 - 后端 `npm run build`：通过
 - 前端 `npx vue-tsc --noEmit`：通过
 - 前端 `npm run build`：通过
+
+---
+
+## v2.3.6 — 2026-06-30
+
+### 🎯 条码优先架构重构
+
+v2.3.5 之前，"标签识别"和"喷码识别"以 **OCR 文本** 为主数据源，条码扫描只用来填一个 `barcode` 字段 + 偶尔反查 productName。结果：用户的喷码图（裸数字 + 乱码中文）走 OCR 提取被严格正则全部漏掉，剩下 5 个 null 字段。
+
+业务侧给出明确约束后，本次重构彻底切换：
+- 标签/喷码识别数据源唯一来自 **25 位行业编码条码**（zxing-cpp 扫出）
+- OCR 文本**不再参与业务字段提取**，仅供错误信息展示
+- 喷码 vs 标签对比**只对比条码能映射的 4 个字段**（batchNo / packNo / productionDate / netWeight）
+- 条码解析失败 → 返回 `_warning` 字段，前端友好提示，不抛 5xx
+
+### 📐 业务规则（N1-N25 行业编码）
+
+```
+N1N2N3      企业代码 (3)
+N4N5        产品类别代码 (2)
+N6N7        产品品级代码 (2)
+N8-N13      生产日期代码 YYMMDD (6)
+N14-N20     产品唯一生产序号代码 (7)
+  ①         车间代码（1=电解一车间电解镍 / 2=电解二车间电解镍 / 3=电解三车间电解镍 /
+             4=电积一车间电解镍(128槽) / 5=电解三车间电积镍(停产) /
+             6=电积一车间 / 7=电积二车间）
+  ②③④      批号后三位（不含 D、J、s、t）
+  ⑤⑥⑦      包号编码（0-200 直接为包号；201-400/401-600/601-800 对应三组机组，
+             包号 = code - 基数，批号 +J 后缀）
+N21-N25     捆净重代码（÷10 即 kg）
+```
+
+### 🔧 改动一览
+
+| 文件 | 改动 |
+|---|---|
+| `ocr-service/main.py` | zxing-cpp 用 `read_barcodes`（复数）支持多条码；保留默认 `try_rotate/try_downscale/try_invert=True`（实景容错最优） |
+| `backend/src/common/services/ocr-utils.ts` | `pickBestBarcode` 增加 25 位优先策略；新增 `normalize25DigitBarcode` 归一化 |
+| `backend/src/common/services/label-ocr.service.ts` | **完全重写**：条码解析为主路径；`mapBarcodeToLabel` 反推所有字段；失败分支返回空数据 + 精确 `_warning` |
+| `backend/src/common/services/spraycode-ocr.service.ts` | **完全重写**：与 label-ocr 同结构；喷码图无条码时返回 `_warning`，不抛异常 |
+| `backend/src/common/services/spraycode-compare.service.ts` | **字段集 12 → 4**：仅 `batchNo/packNo/productionDate/netWeight`；扁平字段对比，不再有 cn/en 双语 |
+| `backend/src/common/services/rule-checker.service.ts` | 兼容业务常量：中文 brand '金川' 不触发英文大小写检查；standard 接受 `GB/T 6516-2025` / `GB/T6516-2025` 两种格式 |
+| `backend/src/nickel/nickel.service.ts` | `recognize()` 移除旧的"自己再 parse 一遍 barcode 反推 productName"重复逻辑；`compare()` 改用扁平字段 |
+| `backend/src/nickel/types/nickel.types.ts` | 加 `_warning?` / `_barcodeRaw?` 字段；`OcrMeta.barcodes[]` 多条码明细 |
+| `backend/src/common/services/{label,spraycode-ocr,spraycode-compare}.service.spec.ts` | **新增**：3 个测试套件 / +20 用例覆盖三大分支 |
+
+### 🎨 业务常量（不再来自 OCR）
+
+```ts
+brand:     '金川'
+standard:  'GB/T 6516-2025'
+weightBy:  '按净重计价'
+address:   '甘肃省金昌市金川区北京路10号'
+```
+
+这些字段 v2.3.4 之前从 OCR 文本识别，v2.3.5 硬编码默认，**v2.3.6 直接作为业务常量**（不写入 rawData.correctedData 区分来源，前端如果关心数据来源可以靠 `_barcodeRaw` 推断）。
+
+### 🚦 三种业务分支的运行时行为
+
+| 场景 | 后端返回 | 前端展示 |
+|---|---|---|
+| **正常**：扫到 25 位条码 | `rawData` 全部字段填好；`_warning` 缺失 | 结果页正常展示 |
+| **失败**：扫不到 / 格式错 / 解析失败 | `rawData` 业务字段全 null；`_warning` 含失败原因；HTTP 仍 200 | 显示 `_warning` 内容 + 整张图为 ❌ 标识 |
+| **极端**：zxing 抛异常 | callOcrFull 返回空 → 走"未扫到条码"分支 | 同上 |
+
+注意：**后端永不抛 5xx**——失败信息都在 `_warning`，前端不依赖 HTTP 状态码判断成败。
+
+### 🐛 调试与排查
+
+前端要查看原始扫到的所有条码（包括非 25 位），可用 `result._ocrMeta.barcodes[]`。每个元素 `{text, format}` 完整列出 zxing-cpp 输出。例如：
+
+```json
+"barcodes": [
+  {"text": "6901234567890",       "format": "EAN_13"},
+  {"text": "09802012606151000050","format": "CODE_128"}
+]
+```
+
+### 📊 测试覆盖
+
+| 套件 | 用例 |
+|---|---|
+| `barcode-parser.service.spec.ts` | 已有 |
+| `label-ocr.service.spec.ts` 🆕 | 8 |
+| `spraycode-ocr.service.spec.ts` 🆕 | 5 |
+| `spraycode-compare.service.spec.ts` 🆕 | 8 |
+| 其余已有套件 | — |
+
+**总计：16 套件 / 195 用例**（v2.3.5 是 175，+20 是 v2.3.6 新加）
+
+### 💡 经验与教训
+
+1. **数据源选择要在架构第一行就定**——v2.3.4 把 OCR 和条码扫描两个引擎都做了，但没有强制优先级，导致用户拍摄不规范时全空。业务约束（"条码优先"）要在 service 第一行就反射到代码，不能寄希望于"下游校验兜住"。
+
+2. **失败处理的两种姿势**：
+   - **HTTP 5xx**：适合"系统出问题"（RapidOCR 挂了、MySQL 崩了）
+   - **200 + `_warning` 字段**：适合"用户输入问题"（图片没条码、图片模糊）
+   
+   重构刻意选后者——用户能立刻看到失败原因 + OCR 文本，而不是面对冷冰冰的 500。
+
+3. **业务常量与 OCR 字段要明确分隔**——v2.3.5 里 brand/standard 等被混在 rawData 里又同时硬编码默认；现在彻底独立成"业务常量"，rule-checker 不再做它们的字段格式校验（中文 brand 不强制英文大小写），减少误报。
+
+4. **重构测试要"覆盖三大分支"而不是"测一个 happy path"**——本次新加的 21 个用例里有 18 个是失败路径。架构改造最大的风险是 happy path 正常工作但失败路径都没测过。
+
+5. **zxing-cpp 单数 vs 复数**——`read_barcode(image)` 返回单个 `Barcode | None`，`read_barcodes(image)` 返回 `list[Barcode]`。一个标签上有 EAN+CODE128+QR 三个码的场景必须用复数版本。CLAUDE.md 提到的 v2.1.1 `read_barcode` TypeError 修复只是冰山一角。
+
+### ⚠️ 后续工作
+
+- **UI 不消费 `_warning`**：本次重构加了字段，但 `ResultCard.vue` / `CompareResultCard.vue` 还没展示。下次前端改版时补：识别失败时显示黄色 banner「为什么失败 + 扫码原文 OCR 文本（给用户参考）」
+- **条码打印测试夹具**：建议加几个标准 25 位条码印刷图（车间 1-7、日期跨年包号 200 边界）做集成测试
+

@@ -1,66 +1,63 @@
 import { Injectable } from '@nestjs/common';
-import { CompareResultItem, CompareSummary } from '../../nickel/types/nickel.types';
+import { CompareResultItem, CompareSummary, NickelLabelData, SpraycodeResult } from '../../nickel/types/nickel.types';
 
-interface LabelFieldValue {
-  cn: string | null;
-  en: string | null;
+/**
+ * 字段定义 — 仅对比条码能映射的 4 个字段
+ *
+ * 业务约束：喷码 vs 标签 一致性对比只关注这些字段。
+ * 其他（brand/standard/productName/grossWeight/pieces）不参与对比。
+ */
+interface ComparableField {
+  field: string;
+  cnLabel: string;
+  enLabel: string;
+  matchType: 'exact' | 'date' | 'weight' | 'batchNo';
 }
+
+const COMPARABLE_FIELDS: ComparableField[] = [
+  { field: 'batchNo', cnLabel: '批号', enLabel: 'BATCH NO.', matchType: 'batchNo' },
+  { field: 'packNo', cnLabel: '包号', enLabel: 'PACK NO.', matchType: 'exact' },
+  { field: 'productionDate', cnLabel: '生产日期', enLabel: 'DATE', matchType: 'date' },
+  { field: 'netWeight', cnLabel: '净重', enLabel: 'NET', matchType: 'weight' },
+];
 
 @Injectable()
 export class SpraycodeCompareService {
   /**
-   * 逐字段对比喷码数据和标签数据
+   * v2.3.6：扁平字段对比（v1 的 cn/en 双语结构已废除）
+   *
+   * 喷码字段来自 SpraycodeResult、标签字段来自 NickelLabelData
+   * 都已是条码反推的扁平字符串/数字
    */
   compare(
-    sprayCodeData: Record<string, any>,
-    labelData: Record<string, any> | null,
+    sprayCodeData: SpraycodeResult,
+    labelData: NickelLabelData | null,
   ): CompareResultItem[] {
-    const safeLabelData = labelData || {
-      packNo: { cn: null, en: null },
-      batchNo: { cn: null, en: null },
-      netWeight: { cn: null, en: null },
-      productionDate: { cn: null, en: null },
-    };
-
-    return [
-      this._compareField('packNo', '包号', 'PACK NO.', sprayCodeData.packNo, safeLabelData.packNo, 'exact'),
-      this._compareField('batchNo', '批号', 'BATCH NO.', sprayCodeData.batchNo, safeLabelData.batchNo, 'batchNo'),
-      this._compareField('netWeight', '净重', 'NET', sprayCodeData.netWeight, safeLabelData.netWeight, 'weight'),
-      this._compareField('productionDate', '日期', 'DATE', sprayCodeData.productionDate, safeLabelData.productionDate, 'date'),
-    ];
+    return COMPARABLE_FIELDS.map((def) =>
+      this.compareField(def, sprayCodeData?.[def.field as keyof SpraycodeResult], labelData?.[def.field as keyof NickelLabelData]),
+    );
   }
 
-  /**
-   * 单字段对比
-   */
-  private _compareField(
-    field: string,
-    cnLabel: string,
-    enLabel: string,
-    sprayValue: any,
-    labelValue: any,
-    matchType: string,
+  private compareField(
+    def: ComparableField,
+    sprayValue: unknown,
+    labelValue: unknown,
   ): CompareResultItem {
-    const labelCn = labelValue && typeof labelValue === 'object' ? (labelValue.cn ?? null) : labelValue;
-    const labelEn = labelValue && typeof labelValue === 'object' ? (labelValue.en ?? null) : labelValue;
-
     const result: CompareResultItem = {
-      field,
-      fieldLabelCn: cnLabel,
-      fieldLabelEn: enLabel,
-      sprayCodeValue: sprayValue,
-      labelValueCn: labelCn,
-      labelValueEn: labelEn,
-      labelValue: labelCn,
+      field: def.field,
+      fieldLabelCn: def.cnLabel,
+      fieldLabelEn: def.enLabel,
+      sprayCodeValue: (sprayValue ?? null) as string | number | null,
+      labelValueCn: (labelValue ?? null) as string | number | null,
+      labelValueEn: (labelValue ?? null) as string | number | null,
+      labelValue: (labelValue ?? null) as string | number | null,
       matched: false,
       missingIn: null,
       diffType: null,
     };
 
     const sprayMissing = sprayValue === null || sprayValue === undefined || sprayValue === '';
-    const labelCnMissing = labelCn === null || labelCn === undefined || labelCn === '';
-    const labelEnMissing = labelEn === null || labelEn === undefined || labelEn === '';
-    const labelMissing = labelCnMissing && labelEnMissing;
+    const labelMissing = labelValue === null || labelValue === undefined || labelValue === '';
 
     if (sprayMissing && labelMissing) {
       result.matched = null;
@@ -80,38 +77,35 @@ export class SpraycodeCompareService {
       return result;
     }
 
-    const cnMatched = labelCnMissing ? false : this._matchByType(sprayValue, labelCn, matchType);
-    const enMatched = labelEnMissing ? false : this._matchByType(sprayValue, labelEn, matchType);
-    result.matched = cnMatched || enMatched;
-
+    result.matched = this.matchByType(sprayValue, labelValue, def.matchType);
     return result;
   }
 
-  private _matchByType(a: any, b: any, matchType: string): boolean {
+  private matchByType(a: unknown, b: unknown, matchType: ComparableField['matchType']): boolean {
     switch (matchType) {
-      case 'exact': return this._exactMatch(a, b);
-      case 'date': return this._dateMatch(a, b);
-      case 'weight': return this._weightMatch(a, b);
-      case 'batchNo': return this._batchNoMatch(a, b);
-      case 'ignore': return true; // 预留：包号暂不解码时忽略对比（当前已恢复exact）
-      default: return this._exactMatch(a, b);
+      case 'exact':
+        return String(a).trim() === String(b).trim();
+      case 'date':
+        return this.dateMatch(a, b);
+      case 'weight':
+        return this.weightMatch(a, b);
+      case 'batchNo':
+        return this.batchNoMatch(a, b);
+      default:
+        return String(a).trim() === String(b).trim();
     }
   }
 
-  private _exactMatch(a: any, b: any): boolean {
-    return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
-  }
-
-  private _dateMatch(a: any, b: any): boolean {
-    const normalize = (dateStr: any): string => {
-      if (!dateStr) return '';
-      let s = String(dateStr).trim();
-      const digits = s.replace(/\D/g, '');
-      if (digits.length === 8) return `${digits.slice(0,4)}-${digits.slice(4,6)}-${digits.slice(6,8)}`;
-      if (digits.length === 6) return `20${digits.slice(0,2)}-${digits.slice(2,4)}-${digits.slice(4,6)}`;
+  private dateMatch(a: unknown, b: unknown): boolean {
+    const normalize = (v: unknown): string => {
+      if (v === null || v === undefined) return '';
+      const digits = String(v).replace(/\D/g, '');
+      if (digits.length === 8) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+      if (digits.length === 6) return `20${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4, 6)}`;
+      const s = String(v).trim();
       const parts = s.split(/[-\/.]/);
       if (parts.length === 3) {
-        let [y, m, d] = parts.map(p => p.replace(/\D/g, ''));
+        let [y, m, d] = parts.map((p) => p.replace(/\D/g, ''));
         if (y.length === 2) y = `20${y}`;
         return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
       }
@@ -120,24 +114,25 @@ export class SpraycodeCompareService {
     return normalize(a) === normalize(b);
   }
 
-  private _weightMatch(a: any, b: any): boolean {
-    const extractNum = (val: any): number | null => {
-      if (val === null || val === undefined) return null;
-      const s = String(val).trim().replace(/[Kk][Gg]/g, '').replace(/[，,]/g, '');
-      const num = parseFloat(s);
-      return isNaN(num) ? null : num;
+  private weightMatch(a: unknown, b: unknown): boolean {
+    const num = (v: unknown): number | null => {
+      if (v === null || v === undefined) return null;
+      const n = parseFloat(String(v).replace(/[Kk][Gg]/g, '').replace(/[，,]/g, ''));
+      return isNaN(n) ? null : n;
     };
-    const numA = extractNum(a);
-    const numB = extractNum(b);
-    if (numA === null || numB === null) return false;
-    return Math.abs(numA - numB) <= 0.05;
+    const na = num(a);
+    const nb = num(b);
+    if (na === null || nb === null) return false;
+    return Math.abs(na - nb) <= 0.05;
   }
 
-  private _batchNoMatch(a: any, b: any): boolean {
-    const normalize = (s: any): string => {
-      // 标准化批号：统一连字符，去掉末尾J/t/s后缀，只比数字组合
-      return String(s).trim().replace(/[—–‐]/g, '-').replace(/[JjTtSs]$/, '');
-    };
+  private batchNoMatch(a: unknown, b: unknown): boolean {
+    // 标准化批号：统一 Unicode dash 为半角，移除末尾 J/t/s 后缀，仅比数字组合
+    const normalize = (v: unknown): string =>
+      String(v)
+        .trim()
+        .replace(/\p{Pd}/gu, '-')
+        .replace(/[JjTtSs]$/, '');
     return normalize(a) === normalize(b);
   }
 
@@ -146,12 +141,20 @@ export class SpraycodeCompareService {
    */
   summarize(compareResult: CompareResultItem[]): CompareSummary {
     const totalFields = compareResult.length;
-    const matched = compareResult.filter(r => r.matched === true).length;
-    const mismatched = compareResult.filter(r => r.matched === false && !r.missingIn).length;
-    const missingInSpraycode = compareResult.filter(r => r.missingIn === 'spraycode').length;
-    const missingInLabel = compareResult.filter(r => r.missingIn === 'label').length;
-    const bothMissing = compareResult.filter(r => r.diffType === 'both-missing').length;
+    const matched = compareResult.filter((r) => r.matched === true).length;
+    const mismatched = compareResult.filter((r) => r.matched === false && !r.missingIn).length;
+    const missingInSpraycode = compareResult.filter((r) => r.missingIn === 'spraycode').length;
+    const missingInLabel = compareResult.filter((r) => r.missingIn === 'label').length;
+    const bothMissing = compareResult.filter((r) => r.diffType === 'both-missing').length;
 
-    return { totalFields, matched, mismatched, missingInSpraycode, missingInLabel, bothMissing, overallMatch: mismatched === 0 && missingInSpraycode === 0 };
+    return {
+      totalFields,
+      matched,
+      mismatched,
+      missingInSpraycode,
+      missingInLabel,
+      bothMissing,
+      overallMatch: mismatched === 0 && missingInSpraycode === 0,
+    };
   }
 }

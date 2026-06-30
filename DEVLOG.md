@@ -705,3 +705,189 @@ address:   '甘肃省金昌市金川区北京路10号'
 - **UI 不消费 `_warning`**：本次重构加了字段，但 `ResultCard.vue` / `CompareResultCard.vue` 还没展示。下次前端改版时补：识别失败时显示黄色 banner「为什么失败 + 扫码原文 OCR 文本（给用户参考）」
 - **条码打印测试夹具**：建议加几个标准 25 位条码印刷图（车间 1-7、日期跨年包号 200 边界）做集成测试
 
+---
+
+### 🚨 v2.3.6 错误经验专章（按发生时序，不是按类别）
+
+> 这一会话踩了 11 个坑。每个按 **症状 → 根因 → 修复 → 教训** 四段写。
+> 写这段的目的是下次遇到相似症状能直接定位根因，而不是回头翻 git log。
+
+---
+
+#### 🐞 坑 1：登录 401 — `.env` 误指生产域名
+
+- **症状**：浏览器 `Failed to load resource: 401`；后端日志**完全没有**这条请求
+- **根因**：`mobile/.env` 的 `VITE_API_BASE_URL=https://mark.jcngcp.xyz`。Vite 把 env 编译进 bundle，浏览器请求**真发到了生产服务器**；生产域名要么 CORS 拒绝、要么不在白名单，请求在浏览器层就失败，根本没到本机 3003
+- **修复**：`.env` 改回 `http://localhost:3003`，重启 Vite
+- **教训**：① dev `.env` **永远指向 localhost**；② Vite 把 env **内联进 JS**，hard refresh 才会拉新值；③ **后端日志静悄悄要立刻怀疑"请求根本没到你服务器"**（CORS preflight / 跨域 / DNS 全都可能），不只是"后端 bug"
+
+---
+
+#### 🐞 坑 2：favicon 404 + `apple-mobile-web-app-capable` 警告
+
+- **症状**：浏览器三个 console 警告/错误
+- **根因**：① 仓库从未提供 favicon；② iOS Safari 已废弃 `apple-mobile-web-app-capable`，需要新别名 `mobile-web-app-capable`
+- **修复**：`mobile/public/favicon.svg`（iOS 18 渐变设计）+ HTML 双 meta 兼容
+- **教训**：浏览器警告是**用户首次体验点**，积少成多影响"专业度"判断。新建项目时 favicon + mobile-web-app-capable 是基本盘
+
+---
+
+#### 🐞 坑 3：登录还是失败 — `stores/auth.ts` 用全局 `axios` 而非统一 `request`
+
+- **症状**：修了 `.env` 后浏览器仍 401
+- **根因**：`auth.ts` 写的是 `axios.post(\`${axios.defaults.baseURL || ''}/api/auth/login\`)`。`axios.defaults.baseURL` 在浏览器默认空串，拼出**相对 URL** `/api/auth/login`。其他 API 走的是 `request.ts` 的 `axios.create({ baseURL })`。两个 baseURL **全局状态相互覆盖**
+- **修复**：`auth.ts` 改 `import request from '@/api/request'`，移除 `axios.defaults.baseURL` 跨模块耦合
+- **教训**：**永远不要在多个模块里同时用全局 axios + 自定义 axios 实例**。baseURL/headers/interceptors 是隐性 cross-module state；统一封装、`import` 显式使用，是最干净的分层
+
+---
+
+#### 🐞 坑 4：`MySQL container Exited (255) 24 hours ago`
+
+- **症状**：后端启动 `ECONNREFUSED ::1:3307`，Nest 重试 9 次后崩溃
+- **根因**：`markapp-mysql` Docker 容器 24 小时前崩溃，无人重启
+- **修复**：`docker start markapp-mysql`
+- **教训**：开发环境起服务时**先列基础设施健康**：`docker ps -a | grep <container>`、`netstat -ano | grep :<port>`，比"启应用然后看错误日志"快 5 倍
+
+---
+
+#### 🐞 坑 5：Nest 启动顺序竞态 — `EADDRINUSE`
+
+- **症状**：重启 OCR 后 `nest start` 报 `EADDRINUSE 0.0.0.0:3003`
+- **根因**：`TaskStop` 是**异步**的，旧 Nest 进程还在占端口；立即 `npm run start:dev` 就冲突
+- **修复**：`netstat -ano | grep :3003` 拿 PID → `Stop-Process -Id <pid> -Force`（Windows 用 PowerShell）→ 等 `TIME_WAIT` 清空再启动
+- **教训**：进程停止→启动至少 sleep 2s；Windows 端口释放比 Linux 慢（TIME_WAIT 60s+）。需要强杀时用 PowerShell `Stop-Process -Force` 而不是 `taskkill /F`（bash 转发会把 `/F` 误识别为路径）
+
+---
+
+#### 🐞 坑 6：zxing-cpp `read_barcodes` NameError
+
+- **症状**：OCR `/ocr/full` 抛 `NameError: name 'read_barcodes' is not defined. Did you mean: 'read_barcode'?`
+- **根因**：`from zxingcpp import read_barcode, BarcodeFormat` **只导入了单数**。我以为 CLI `dir(zxingcpp)` 列出来就是模块可见 — 实际上 `dir()` 看的是模块**全部属性**，但 `from x import y` 不导入未指定的属性到当前 namespace
+- **修复**：`from zxingcpp import read_barcode, read_barcodes, BarcodeFormat`
+- **教训**：①`dir(module)` 列出的属性 **≠** 当前命名空间可见属性；② 改用 `import zxingcpp as zx` 然后 `zx.read_barcodes(...)` 更安全；③ Python 模块改 import **必须重启服务**，不像 JS HMR
+
+---
+
+#### 🐞 坑 7：25 位测试数据手工算错位
+
+- **症状**：测试期望 `batchNo: '26-1-000J'`，实际返回 `null`
+- **根因**：手写测试数据 `'098020126061510000250 15000'.replace(/\s/g,'')` 是 27 字符而非 25，barcode-parser 直接拒
+- **修复**：从 `0980201260615100025015000`（车间=1, 后三位=000, packCode=250, 净重=1500）逐位对照重写
+- **教训**：构造测试 fixture **用代码组装**，不要手写 25 位数字。模板：`codeOf({workshop, suffix, packCode, weight}) → str`，永远不出错
+
+---
+
+#### 🐞 坑 8：TypeScript 测试 mock 类型错位
+
+- **症状**：`Property 'confidence' is missing in type` TS 报错
+- **根因**：`callOcrFull` 返回 `Array<{text, confidence}>`，mock 时只给了 `text`
+- **修复**：mock 补 `confidence: 0.77`
+- **教训**：用真实类型签名当模板写 mock，不要靠"看着像就行"
+
+---
+
+#### 🐞 坑 9：净重阈值测试逻辑反
+
+- **症状**：期望 `1500 vs 1500.1` 匹配，实际 false
+- **根因**：阈值 `|diff| ≤ 0.05`，但 diff=`0.1` 当然不通过 — 测试边界算错，不是代码 bug
+- **修复**：拆两个 case：0.04 期望匹配、20 期望不匹配
+- **教训**：边界测试**至少要"边缘通过"+"边缘失败"两组**；写完立刻人脑用 1+1 验算一遍阈值
+
+---
+
+#### 🐞 坑 10：`_warning` 文案硬编码
+
+- **症状**：测试期望 `/条码格式无效/` 匹配，实际拿到"未检测到 25 位行业编码条码"
+- **根因**：`emptyLabel()` 写**两套固定 message**，不管上面哪条分支都拿不到具体原因
+- **修复**：`emptyLabel(barcodeRaw, reason)` 接收 reason 上游传入
+- **教训**：失败信息**当场构造并透传**，不要在 helper 里"我猜你想要哪种"。helper 的输入参数决定它能不能产出有意义的输出
+
+---
+
+#### 🐞 坑 11：try_harder / is_pure 误用
+
+- **症状**：本来想加 `try_harder=True` 提升容错
+- **根因**：zxing-cpp 参数名是 `is_pure`（不是 `try_isPure`），而且**实景照片绝不能设 `True`** — 该参数仅适用于程序生成的纯净条码图，真实场景设了反而漏识
+- **修复**：保留默认参数（`try_rotate/try_downscale/try_invert=True` 已经是实景最优）
+- **教训**：第三方库的"性能优化"参数往往有反直觉副作用；改前**先读完整 API 文档**而不是猜参数名
+
+---
+
+### 🧠 v2.3.6 架构层经验（5 条核心取舍）
+
+#### 1. 数据源优先级必须在 service 第一行声明
+- v2.3.4 同时输出 OCR 文本和条码，让下游自己挑 → "中文乱码当成数字段"
+- **新原则**：service 文件顶部注释明确"数据源 = X，Y 仅作 info"
+
+#### 2. 失败语义双通道
+| 失败类型 | HTTP 语义 | 字段 |
+|---|---|---|
+| 系统问题（OCR 挂了、MySQL 崩） | 5xx | `error.message` |
+| 用户输入问题（图片没条码、格式错） | 200 | `data.rawData._warning` |
+
+业务逻辑层**只控 200 路径**，系统层（NestJS exception filter）管 500 路径。**不混**。
+
+#### 3. 业务常量 vs OCR 字段要明确切分
+- v2.3.5：brand/standard 既 OCR 提取又硬编码默认 → 数据来源含糊
+- v2.3.6：业务常量直接硬编码；rule-checker 不再校验它们（中文 brand 不强制英文大小写）
+- **原则**：配置/常量是一个语义层，OCR 提取是另一个；混在一起让数据来源不可追溯
+
+#### 4. 重构测试的"三大分支"覆盖率
+- 本次新加 21 个用例，**18 个是失败路径**
+- 架构改造最大风险不是 happy path 错（happy path 错误编译都过不了），是失败路径没覆盖
+- 模板：`describe('分支 X：<条件>')` + `it('<具体表现>', ...)`
+
+#### 5. zxing-cpp import 与多条码
+- `read_barcode` 单数 → 单个 `Barcode | None`；`read_barcodes` 复数 → `list[Barcode]`
+- 现实标签常同时含 EAN + CODE128 + QR，复数才是正解
+- v2.1.x 那个 TypeError 修复只是"从错误变成了只取第一个"的**隐性 bug**，多条码仍未支持
+
+---
+
+### 📊 端到端实测
+
+admin 登录 → 上传标签图 → Nest `/recognize`：
+
+```
+zxing /ocr/full:               barcodes: 2
+  - QR_CODE   text="1090602260525315143114765"
+  - CODE_128  text="1090602260525315143114765"
+
+Nest /recognize 返回:
+  batchNo:        26-3-151J
+  packNo:         31         (packCode=431 → 431-400=31, +J)
+  netWeight:      1476.5 kg  (14765 / 10)
+  productionDate: 2026-05-25
+  productName:    电解镍     (workshopCode=3 反推)
+  brand:          金川
+  standard:       GB/T 6516-2025
+  weightBy:       按净重计价
+  address:        甘肃省金昌市金川区北京路10号
+  _warning:       (空)
+```
+
+⚠️ **实测注意**：现实扫码得到的是 22 位（`1090602260525315143114765`）而非规范 25 位。barcode-parser 走空格分隔路径仍能解析（因为长度对齐 >=18 是合法变体），但**生产里应当人工核对**是不是产品喷码省略了部分段。
+
+---
+
+### 📋 总账（v2.3.6）
+
+| 项 | 结果 |
+|---|---|
+| 后端单元测试 | 16 套件 / 195 用例 (+20) |
+| TypeScript 检查 | 通过 |
+| 后端构建 | 通过 |
+| 前端构建 | 通过 |
+| OCR 服务 | 启动 + 多条码支持 |
+| 端到端 | admin 登录 → /recognize 真图成功 |
+| Git | `29fe358` — 15 files, +1037/-425 |
+
+### ⚠️ 后续工作（同上）
+
+- [ ] 前端 `ResultCard.vue` / `CompareResultCard.vue` 消费 `_warning`（黄色 banner + OCR 文本回显）
+- [ ] 集成测试夹具：标准 25 位 + 边界（packCode=200/201/400/600/800）
+- [ ] 产品文档：现实 22 位编码的兼容性说明
+- [ ] OCR 服务返回真实 25 位比例监控
+- [ ] `.env` 模板默认值改为 `localhost`，部署时手工覆盖
+- [ ] Vite config 加 preload `request.ts`，避免 dev 模式首帧延迟
+

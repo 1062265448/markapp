@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { NickelConfigService } from '../../config/config.service';
 import { NickelLabelData, OcrMeta, BarcodeParsed } from '../../nickel/types/nickel.types';
 import { WORKSHOP_MAP } from '../../nickel/types/nickel.types';
@@ -18,6 +18,7 @@ export interface LabelOcrResult {
 
 @Injectable()
 export class LabelOcrService {
+  private readonly logger = new Logger(LabelOcrService.name);
   private rapidOcrUrl: string;
 
   constructor(
@@ -39,7 +40,7 @@ export class LabelOcrService {
    */
   async recognizeLabel(imageBuffer: Buffer, userBarcode?: string): Promise<LabelOcrResult> {
     const start = Date.now();
-    console.log('[LabelOCR] 开始标签识别（条码优先）');
+    this.logger.log('开始标签识别（条码优先）');
 
     // 调 OCR + 条码扫描
     const { lines, barcodes, ocrLatencyMs, barcodeLatencyMs, barcodeCount } = await callOcrFull(
@@ -66,7 +67,7 @@ export class LabelOcrService {
       const reason = !rawBarcode
         ? `未扫到条码（zxing 识别出 ${barcodeCount} 个码，均非 25 位行业编码）`
         : `条码格式无效：期望 25 位数字，实际 "${rawBarcode.slice(0, 30)}${rawBarcode.length > 30 ? '...' : ''}"`;
-      console.warn('[LabelOCR]', reason);
+      this.logger.warn(reason);
       return {
         labelData: this.emptyLabel(cleanedBarcode ? cleanedBarcode : null, reason),
         barcodeParsed: null,
@@ -78,7 +79,7 @@ export class LabelOcrService {
     const parsed = this.barcodeParser.parse(cleanedBarcode);
     if (!parsed || !parsed.parsed) {
       const reason = parsed?.message || '25 位条码解析失败';
-      console.warn('[LabelOCR]', reason, '→', cleanedBarcode);
+      this.logger.warn(`${reason} → ${cleanedBarcode}`);
       return {
         labelData: this.emptyLabel(cleanedBarcode, reason),
         barcodeParsed: parsed,
@@ -89,15 +90,8 @@ export class LabelOcrService {
     // === 成功：用 BarcodeParsed 反推 labelData ===
     const labelData = this.mapBarcodeToLabel(parsed);
     const totalLatency = Date.now() - start;
-    console.log(
-      '[LabelOCR] 标签识别完成，耗时:',
-      totalLatency,
-      'ms, 批号:',
-      labelData.batchNo,
-      '包号:',
-      labelData.packNo,
-      '日期:',
-      labelData.productionDate,
+    this.logger.log(
+      `标签识别完成，耗时: ${totalLatency} ms, 批号: ${labelData.batchNo}, 包号: ${labelData.packNo}, 日期: ${labelData.productionDate}`,
     );
 
     return {

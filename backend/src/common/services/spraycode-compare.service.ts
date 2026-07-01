@@ -105,7 +105,10 @@ export class SpraycodeCompareService {
       const s = String(v).trim();
       const parts = s.split(/[-\/.]/);
       if (parts.length === 3) {
-        let [y, m, d] = parts.map((p) => p.replace(/\D/g, ''));
+        const cleaned = parts.map((p) => p.replace(/\D/g, ''));
+        let y = cleaned[0];
+        const m = cleaned[1];
+        const d = cleaned[2];
         if (y.length === 2) y = `20${y}`;
         return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
       }

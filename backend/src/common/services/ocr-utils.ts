@@ -2,6 +2,8 @@
  * OCR 共享工具方法
  * 提取自 LabelOcrService 和 SpraycodeOcrService 的重复逻辑
  */
+import { Logger } from '@nestjs/common';
+import axios from 'axios';
 
 // OCR /ocr/full 端点返回的单张图片结果
 export interface OcrFullResult {
@@ -19,6 +21,9 @@ export interface OcrTextResult {
   lineCount: number;
   latencyMs: number;
 }
+
+// 模块级 logger（工具函数静态调用，无法注入实例）
+const ocrUtilsLogger = new Logger('OcrUtils');
 
 /**
  * OCR 字符纠错映射（O→0, o→0, l→1, I→1）
@@ -132,7 +137,7 @@ export async function callOcrFull(
       }
     }
   } catch (e) {
-    console.warn('[OCR] /ocr/full 调用失败:', (e as Error).message);
+    ocrUtilsLogger.warn(`/ocr/full 调用失败: ${(e as Error).message}`);
     // 降级到 /ocr/text（仅文本，无条码）
     try {
       const fallbackResponse = await callOcrPost(rapidOcrUrl + '/ocr/text', base64, 10000);
@@ -148,7 +153,7 @@ export async function callOcrFull(
         };
       }
     } catch (e2) {
-      console.warn('[OCR] /ocr/text 降级也失败:', (e2 as Error).message);
+      ocrUtilsLogger.warn(`/ocr/text 降级也失败: ${(e2 as Error).message}`);
     }
   }
 
@@ -164,8 +169,6 @@ export async function callOcrFull(
 }
 
 // ── 内部辅助 ──
-
-import axios from 'axios';
 
 async function callOcrPost(url: string, base64: string, timeout: number): Promise<any> {
   const response = await axios.post(

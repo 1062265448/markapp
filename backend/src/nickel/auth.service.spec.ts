@@ -1,17 +1,24 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { createHmac } from 'crypto';
 import { AuthService } from './auth.service';
 import { NickelConfigService } from '../config/config.service';
 
 describe('AuthService', () => {
   let service: AuthService;
-  let config: { adminUsername: string; adminPassword: string; tokenSecret: string };
+  let config: {
+    adminUsername: string;
+    adminPassword: string;
+    tokenSecret: string;
+    isProduction: () => boolean;
+  };
 
   const buildModule = async (overrides: Partial<typeof config> = {}) => {
     config = {
       adminUsername: 'admin',
       adminPassword: 'correct-pw',
       tokenSecret: 'test-secret-key-32-bytes-or-more-please',
+      isProduction: () => false, // 默认非生产，避免 fail-closed 误伤测试
       ...overrides,
     };
     const moduleRef = await Test.createTestingModule({
@@ -86,8 +93,7 @@ describe('AuthService', () => {
       const json = JSON.stringify({ sub: '1', username: 'admin', exp: Date.now() - 1000 });
       const payloadB64 = Buffer.from(json, 'utf8').toString('base64url');
       // 用相同 secret 签名
-      const crypto = require('crypto');
-      const sig = crypto.createHmac('sha256', config.tokenSecret).update(payloadB64).digest('base64url');
+      const sig = createHmac('sha256', config.tokenSecret).update(payloadB64).digest('base64url');
       const expiredToken = `${payloadB64}.${sig}`;
       expect(service.verify(expiredToken)).toBeNull();
     });
@@ -106,6 +112,45 @@ describe('AuthService', () => {
       // 用不同 secret 创建的 service 实例
       await buildModule({ tokenSecret: 'different-secret' });
       expect(service.verify(access_token)).toBeNull();
+    });
+  });
+
+  describe('生产环境 fail-closed', () => {
+    it('生产模式 + 缺失 TOKEN_SECRET 应启动失败', async () => {
+      await expect(
+        Test.createTestingModule({
+          providers: [
+            AuthService,
+            {
+              provide: NickelConfigService,
+              useValue: {
+                adminUsername: 'admin',
+                adminPassword: 'pw',
+                tokenSecret: '',
+                isProduction: () => true,
+              },
+            },
+          ],
+        }).compile(),
+      ).rejects.toThrow(/TOKEN_SECRET/);
+    });
+
+    it('生产模式 + 已配 TOKEN_SECRET 应正常初始化', async () => {
+      const moduleRef = await Test.createTestingModule({
+        providers: [
+          AuthService,
+          {
+            provide: NickelConfigService,
+            useValue: {
+              adminUsername: 'admin',
+              adminPassword: 'pw',
+              tokenSecret: 'production-secret-32bytes-or-more-please',
+              isProduction: () => true,
+            },
+          },
+        ],
+      }).compile();
+      expect(moduleRef.get(AuthService)).toBeInstanceOf(AuthService);
     });
   });
 });

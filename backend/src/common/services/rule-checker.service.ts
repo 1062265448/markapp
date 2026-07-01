@@ -521,7 +521,9 @@ export class RuleCheckerService {
         if (allSame) {
           const workshopCode = workshopSources[0];
           const isElectrowinning = corrected.productName.includes('电积');
+          // eslint-disable-next-line prefer-const
           let expectedProductType: string | null = null;
+          // eslint-disable-next-line prefer-const
           let expectedIsEW = false;
 
           if ([1, 2, 3, 4].includes(workshopCode)) { expectedProductType = '电解镍'; expectedIsEW = false; }
@@ -674,7 +676,7 @@ export class RuleCheckerService {
   correctStandardSpelling(standard: string): string {
     if (!standard) return standard;
 
-    let fixed = standard
+    const fixed = standard
       .replace(/^6B\//, 'GB/')
       .replace(/^6D\//, 'GB/')
       .replace(/^GD\//, 'GB/')

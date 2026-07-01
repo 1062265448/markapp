@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { NickelConfigService } from '../../config/config.service';
 import { OcrMeta } from '../../nickel/types/nickel.types';
 import { BarcodeParserService } from './barcode-parser.service';
@@ -22,6 +22,7 @@ interface SpraycodeFields {
 
 @Injectable()
 export class SpraycodeOcrService {
+  private readonly logger = new Logger(SpraycodeOcrService.name);
   private rapidOcrUrl: string;
 
   constructor(
@@ -43,7 +44,7 @@ export class SpraycodeOcrService {
    */
   async recognizeSpraycode(imageBuffer: Buffer): Promise<SpraycodeFields> {
     const start = Date.now();
-    console.log('[SpraycodeOCR] 开始喷码识别（条码优先）');
+    this.logger.log('开始喷码识别（条码优先）');
 
     const { lines, barcodes, ocrLatencyMs, barcodeLatencyMs, barcodeCount } = await callOcrFull(
       imageBuffer,
@@ -68,7 +69,7 @@ export class SpraycodeOcrService {
       const reason = !rawBarcode
         ? `未扫到条码（zxing 识别出 ${barcodeCount} 个码，均非 25 位行业编码）`
         : `条码格式无效：期望 25 位数字，实际长度 ${rawBarcode.replace(/\D/g, '').length}`;
-      console.warn('[SpraycodeOCR]', reason);
+      this.logger.warn(reason);
       return {
         batchNo: null,
         packNo: null,
@@ -86,7 +87,7 @@ export class SpraycodeOcrService {
 
     const parsed = this.barcodeParser.parse(cleanedBarcode);
     if (!parsed || !parsed.parsed) {
-      console.warn('[SpraycodeOCR] 25 位条码解析失败:', parsed?.message, '→', cleanedBarcode);
+      this.logger.warn(`25 位条码解析失败: ${parsed?.message ?? '未知错误'} → ${cleanedBarcode}`);
       return {
         batchNo: null,
         packNo: null,
@@ -105,7 +106,7 @@ export class SpraycodeOcrService {
     const batchNo = `${yearShort}-${parsed.workshopCode}-${parsed.batchNoSuffix}${parsed.batchNoSuffixLetter}`;
 
     const latency = Date.now() - start;
-    console.log('[SpraycodeOCR] 喷码识别完成，耗时:', latency, 'ms, 批号:', batchNo);
+    this.logger.log(`喷码识别完成，耗时: ${latency} ms, 批号: ${batchNo}`);
 
     return {
       batchNo,

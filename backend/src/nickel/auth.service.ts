@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { NickelConfigService } from '../config/config.service';
 
@@ -32,9 +32,26 @@ interface TokenPayload {
 @Injectable()
 export class AuthService {
   private static readonly TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
+  // 仅开发/测试 fallback；生产环境必须在 AuthServiceModule.onModuleInit 之前已配置 TOKEN_SECRET
   private static readonly SECRET_FALLBACK = 'markapp-demo-secret-change-in-production';
+  private readonly logger = new Logger(AuthService.name);
 
-  constructor(private readonly configService: NickelConfigService) {}
+  constructor(private readonly configService: NickelConfigService) {
+    this.ensureSecretInProduction();
+  }
+
+  /**
+   * 生产环境强制要求 TOKEN_SECRET 配置；缺失时启动失败（fail-closed）
+   * 避免默认 fallback 字符串被公开源码泄漏后任意伪造 token
+   */
+  private ensureSecretInProduction(): void {
+    if (this.configService.isProduction() && !this.configService.tokenSecret) {
+      const msg = '生产环境必须配置 TOKEN_SECRET 环境变量（建议 32 字节随机字符串，' +
+        '生成: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"）';
+      this.logger.error(msg);
+      throw new Error(msg);
+    }
+  }
 
   /**
    * 校验用户名/密码并签发 token

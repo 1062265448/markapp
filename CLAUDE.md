@@ -197,19 +197,30 @@ npm run cap:build              # 构建并同步到 Android
 
 ## 测试
 
-后端 7 个测试套件、108 个用例：
+后端 16 个测试套件、197 个用例（`npm test`，2026-07-01 统计）：
 
 | 套件 | 文件 | 用例数 |
 |------|------|--------|
-| 条码解析 | `barcode-parser.service.spec.ts` | ~15 |
-| JSON 解析 | `json-parser.service.spec.ts` | ~10 |
-| 图片预处理 | `image-preprocess.service.spec.ts` | ~8 |
-| 置信度评分 | `confidence.service.spec.ts` | ~15 |
-| 规则校验 | `rule-checker.service.spec.ts` | ~26 |
-| 历史服务 | `nickel-history.service.spec.ts` | ~15 |
-| 图片存储 | `image-storage.service.spec.ts` | ~18 |
+| 条码解析 | `barcode-parser.service.spec.ts` | 24 |
+| 规则校验 | `rule-checker.service.spec.ts` | 35 |
+| OCR 工具 | `ocr-utils.spec.ts` | 20 |
+| 图片预处理 | `image-preprocess.service.spec.ts` | 16 |
+| 图片存储 | `image-storage.service.spec.ts` | 11 |
+| 历史服务 | `nickel-history.service.spec.ts` | 13 |
+| 置信度评分 | `confidence.service.spec.ts` | 7 |
+| 喷码对比 | `spraycode-compare.service.spec.ts` | 9 |
+| JSON 解析 | `json-parser.service.spec.ts` | 10 |
+| 标签 OCR | `label-ocr.service.spec.ts` | 6 |
+| 喷码 OCR | `spraycode-ocr.service.spec.ts` | 5 |
+| Auth 服务 | `auth.service.spec.ts` | 12（含生产 fail-closed） |
+| 控制器 | `nickel.controller.spec.ts` | 4 |
+| API Key Guard | `guards/api-key.guard.spec.ts` | 7 |
+| JWT Guard | `guards/jwt-auth.guard.spec.ts` | 5 |
+| 限流 Guard | `guards/rate-limit.guard.spec.ts` | 7 |
 
-前端暂无测试套件。
+整体覆盖率：~64% stmts / ~55% branch。核心业务模块（`nickel.service.ts` / `nickel.controller.ts`）覆盖偏低，需要补集成测试。
+
+前端暂无测试套件（计划接入 Vitest）。
 
 ## 已知注意事项
 

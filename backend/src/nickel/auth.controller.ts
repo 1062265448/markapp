@@ -1,7 +1,9 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import { IsString, MinLength } from 'class-validator';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RateLimitGuard } from './guards/rate-limit.guard';
 
 class LoginDto {
   @IsString()
@@ -18,29 +20,25 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   /**
-   * 登录端点 — 不受 ApiKeyGuard 保护（用户用账号密码换取 token）
-   * 仍然受 RateLimitGuard 保护（通过在 Module 中全局绑定）
+   * 登录端点 — 不挂 ApiKeyGuard（用户用账号密码换取 token，无需设备级密钥）
+   * 显式挂 RateLimitGuard 防止凭据暴力枚举
    */
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(RateLimitGuard)
   async login(@Body() dto: LoginDto) {
     return this.authService.login(dto.username, dto.password);
   }
 
   /**
    * 验证当前 token 是否有效，返回当前用户信息
+   * 显式挂 JwtAuthGuard 复用统一的 token 校验逻辑（含错误格式归一化）
    */
   @Get('me')
+  @UseGuards(JwtAuthGuard)
   async me(@Req() req: Request) {
-    const auth = req.headers['authorization'];
-    if (!auth || !auth.startsWith('Bearer ')) {
-      throw new UnauthorizedException('未登录');
-    }
-    const token = auth.slice(7).trim();
-    const payload = this.authService.verify(token);
-    if (!payload) {
-      throw new UnauthorizedException('token 无效或已过期');
-    }
-    return { id: payload.sub, username: payload.username };
+    // JwtAuthGuard 已校验通过，user 已被挂在 request.user
+    const user = (req as any).user as { id: string; username: string };
+    return { id: user.id, username: user.username };
   }
 }

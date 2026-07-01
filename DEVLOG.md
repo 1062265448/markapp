@@ -887,6 +887,303 @@ Nest /recognize 返回:
 - [ ] 前端 `ResultCard.vue` / `CompareResultCard.vue` 消费 `_warning`（黄色 banner + OCR 文本回显）
 - [ ] 集成测试夹具：标准 25 位 + 边界（packCode=200/201/400/600/800）
 - [ ] 产品文档：现实 22 位编码的兼容性说明
+
+---
+
+## v2.3.7 — 2026-07-01 安全加固与核心集成测试
+
+### 🔍 全量项目审查
+
+应用户「完整检查项目」要求，对 backend + mobile + ocr-service 三端做了系统性审计。覆盖范围：
+
+| 维度 | 工具/方法 | 结果 |
+|---|---|---|
+| TypeScript 类型 | `tsc --noEmit`（双端） | 后端 + 前端均干净 |
+| 测试覆盖 | `jest --coverage` | 195 用例全通过；整体 64.07%，但 `nickel.service.ts` 仅 **13.58%** |
+| 静态分析 | `eslint` | 旧 `.eslintrc.js` 与最新 eslint 10 不兼容，`npm run lint` 跑不通 |
+| 配置一致性 | grep + 手工对照 | `.env` 变量名与 `ConfigService` getter 一致（v2.3.2 已修） |
+| 守卫挂载 | `Reflector` + 反射元数据 | 控制器级未误挂守卫（v2.3.4 复盘守护） |
+| 安全 | 手工审查 | **3 处 P0 安全问题**（见下） |
+
+### 🔴 P0 — 安全漏洞修复
+
+#### 问题 1：`/api/auth/login` 实际不受限流保护
+
+**症状**：`AuthController.login()` 的注释写着「仍受 RateLimitGuard 保护（通过在 Module 中全局绑定）」，但 `grep APP_GUARD / useGlobalGuards` 全代码库为 **0 命中**。
+
+**影响**：登录端点可被暴力枚举 admin / admin123，凭据爆破无任何限制。
+
+**根因**：v2.3.4 把 RateLimitGuard 改为方法级挂载时，登录端点忘了补 `@UseGuards(RateLimitGuard)`，但注释保留了「全局绑定」的旧假设。
+
+**修复**：
+```typescript
+@Post('login')
+@HttpCode(HttpStatus.OK)
+@UseGuards(RateLimitGuard)  // 显式补上
+async login(@Body() dto: LoginDto) { ... }
+```
+
+**⚠️ 教训**：**注释说「全局绑定」≠ 实际全局绑定**。Guard 绑定方式（控制器级 / 方法级 / `APP_GUARD` provider）是行为契约，文档必须用代码而不是散文来描述。
+
+---
+
+#### 问题 2：`/api/auth/me` 完全绕开 NestJS Guard 链
+
+**症状**：`AuthController.me()` 手写 token 解析，缺失 NestJS Guard 标准的错误归一化、metrics 埋点、Swagger 集成点。
+
+```typescript
+// 旧代码 — 路由级验证，但所有错误处理散落
+@Get('me')
+async me(@Req() req: Request) {
+  const auth = req.headers['authorization'];
+  if (!auth || !auth.startsWith('Bearer ')) {
+    throw new UnauthorizedException('未登录');  // 与 JwtAuthGuard 错误格式不一致
+  }
+  // ...
+}
+```
+
+**修复**：改用 `JwtAuthGuard` 统一验证，从 `req.user` 读取用户信息。
+
+**⚠️ 教训**：**永远用 Guard 而非 inline 验证**。路由级手动验证导致：(1) 错误格式不一致；(2) 漏掉 metrics；(3) 一旦 `JwtAuthGuard` 增强（如加 refresh、token 黑名单），`me` 不会自动受益。
+
+---
+
+#### 问题 3：`TOKEN_SECRET` 生产模式回退到硬编码字符串
+
+**症状**：
+```typescript
+// auth.service.ts
+private static readonly SECRET_FALLBACK = 'markapp-demo-secret-change-in-production';
+private hmac(data: string): string {
+  const secret = this.configService.tokenSecret || AuthService.SECRET_FALLBACK;
+  return createHmac('sha256', secret).update(data).digest('base64url');
+}
+```
+
+**影响**：如果生产环境忘记配 `TOKEN_SECRET`，所有 JWT 用一个公开源码可查的字符串签名 — **任何人可伪造 admin token 直接登录**。
+
+**修复**：构造函数 fail-closed
+```typescript
+private ensureSecretInProduction(): void {
+  if (this.configService.isProduction() && !this.configService.tokenSecret) {
+    const msg = '生产环境必须配置 TOKEN_SECRET...';
+    this.logger.error(msg);
+    throw new Error(msg);
+  }
+}
+```
+
+**测试覆盖**：
+```typescript
+it('生产模式 + 缺失 TOKEN_SECRET 应启动失败', async () => {
+  await expect(Test.createTestingModule({...}).compile()).rejects.toThrow(/TOKEN_SECRET/);
+});
+```
+
+**⚠️ 教训**：**任何 "fallback to insecure default" 都是定时炸弹**。开发/生产应该共用同一套行为，仅在 demo 模式放水。fallback 应在启动时抛错，让运维立即发现，而不是在用户登录时才发现 token 不可信。
+
+---
+
+### 🟡 P1 — 工程化债务清理
+
+#### 修复 1：CLAUDE.md 测试数过期
+
+文档写「7 套件 / 108 用例」，实际已增长到 **16 套件 / 195 用例**（v2.3.5 → v2.3.6 重构新增 ~87 个）。
+
+**⚠️ 教训**：文档化的测试数应当 CI 自动生成（如 jest-junit），而不是手工抄写。
+
+---
+
+#### 修复 2：`console.*` → NestJS Logger
+
+`grep console\\. src/` 命中 13 处，其中 8 处是生产逻辑（label-ocr / spraycode-ocr / ocr-utils / image-preprocess）。生产环境用 console.log 会：(1) 绕过 NestJS log level；(2) 没有时间戳/上下文；(3) 无法重定向到日志收集。
+
+**修复**：每个服务用 `private readonly logger = new Logger(ServiceName.name)` 替换。
+
+```typescript
+// 旧
+console.warn('[LabelOCR]', reason);
+
+// 新
+this.logger.warn(reason);  // 自动带 [LabelOcrService] 前缀
+```
+
+**保留**：`main.ts` 启动 banner 是惯例（NestJS 自己 bootstrap 也用 console.log）。
+
+**⚠️ 教训**：**日志是行为，不是调试工具**。从第一天就该用 Logger，不要等上线再换。
+
+---
+
+#### 修复 3：ESLint 配置失效（`npm run lint` 跑不通）
+
+**症状**：`backend/.eslintrc.js` 用旧格式（`module.exports = { parser, extends }`），但 `package.json` devDeps 里**根本没有 eslint**。`npx eslint` 会临时下载最新版 eslint 10，而 v10 已切换到 flat config（`eslint.config.js`），旧 `.eslintrc.js` 完全被忽略。
+
+**修复**：固定 `eslint@^8.57` + `@typescript-eslint/*@^7.18` 到 devDeps。理由：
+- 8.x 是最后一个支持 `.eslintrc.js` 的版本（迁移成本最低）
+- 7.x typescript-eslint 与 8.x eslint 兼容
+- 项目用 NestJS 11，生态尚未强制 flat config
+
+**顺带修 2 处 lint 错误**：
+1. `rule-checker.service.ts:524` — `let expectedProductType` 被误改成 `const`，但 if/else 分支中**会重新赋值**。**详见下方「修复过程的踩坑」**
+2. `spraycode-compare.service.ts:108` — `let [y, m, d]` 中 m/d 不再赋值，应为 `const`
+3. `auth.service.spec.ts:95` — `const crypto = require('crypto')` 违反 `no-var-requires`，改为 `import { createHmac } from 'crypto'`
+
+**⚠️ 教训**：**lint 工具没装 ≠ lint 通过**。没有 CI 跑 lint 的项目，eslint 配置经常是「摆设」。应当：(1) 把 lint 加到 CI；(2) 把 lint 结果作为 PR merge 必要条件。
+
+---
+
+### 🧪 P1 — 核心集成测试补齐
+
+**问题**：`nickel.service.ts` 覆盖率 13.58%（235 行中只有 22 行被覆盖）。
+
+**根因**：自 v2.3.0 引入 `NickelService` 起就**只有 controller spec**，没有 service spec。controller spec 只验证 `@UseGuards` 元数据挂载位置，不验证业务编排。任何重构都不会被现有测试发现。
+
+**修复**：新增 `nickel.service.spec.ts`（21 个用例），mock 7 个依赖服务，覆盖：
+
+| 维度 | 用例数 |
+|---|---|
+| `recognize()` happy path | 2 |
+| `recognize()` 输入校验（4 种 400 分支） | 4 |
+| `recognize()` 错误传播（BadRequest 透传 vs 其他异常包 success:false） | 2 |
+| `recognize()` 业务边界（_warning 优先 / error/warning 统计） | 2 |
+| `recognizeSpraycode()` | 4 |
+| `compare()`（1 张图 / 2 张图 / 标签校验） | 6 |
+| `health()` | 1 |
+| **合计** | **21** |
+
+**覆盖率提升**：
+
+```
+nickel.service.ts   13.58% → 95.06%   ⬆️ +81.48 pp
+overall stmts       64.07% → ~70%+
+```
+
+**⚠️ 教训**：**核心编排代码必须有集成测试**。单元测试各服务单独覆盖得再好，没覆盖「它们如何被串起来」就等于没覆盖。`recognize()` 的 9 步流水线（验证 → 预处理 → OCR → 纠错 → 校验 → 置信度 → 拼装 message → 异常处理）任何一步错位都会破坏业务，但只有集成测试能发现。
+
+---
+
+### 💥 修复过程中的踩坑（错误经验总结）
+
+#### 踩坑 1：把 `let` 改成 `const` 破坏了逻辑
+
+**场景**：修 lint `prefer-const` 报错。
+
+```typescript
+let expectedProductType: string | null = null;
+let expectedIsEW = false;
+
+if ([1, 2, 3, 4].includes(workshopCode)) { expectedProductType = '电解镍'; expectedIsEW = false; }
+else if ([5, 6, 7].includes(workshopCode)) { expectedProductType = '电积镍'; expectedIsEW = true; }
+```
+
+lint 报 `prefer-const`，我机械地改成 `const`，立刻 `tsc --noEmit` 报 4 个错误：
+```
+Cannot assign to 'expectedProductType' because it is a constant.
+Cannot assign to 'expectedIsEW' because it is a constant.
+```
+
+**根因**：**没仔细看代码就动手**。eslint 的 `prefer-const` 在某些嵌套分支场景下会有 false positive（它只看到顶层 `let = null`，没追踪到 `if` 块内的赋值）。
+
+**修复**：还原 `let`，加 `// eslint-disable-next-line prefer-const` 注释。
+
+**⚠️ 教训**：**lint 报错先看代码再下手**。`prefer-const` 不是「绝对该改」的硬规则，它只是「优先建议」。当代码确实需要重新赋值时，`// eslint-disable-next-line` + 注释解释比强行改成 `const` 安全 100 倍。
+
+---
+
+#### 踩坑 2：删除 import 但保留装饰器导致 `TS2304`
+
+**场景**：重构 `/api/auth/me` 时，把方法体从「手写 verify」改成「读 req.user」，同时删除了 `import { ... UnauthorizedException }`。
+
+```typescript
+// 错误：删除了 UnauthorizedException，但忘了删 Req
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+
+@Get('me')
+@UseGuards(JwtAuthGuard)
+async me(@Req() req: Request) { ... }  // ❌ TS2304: Cannot find name 'Req'
+```
+
+**根因**：**手工编辑时 import 列表和装饰器列表是两份独立的清单**。IDE 通常会同步高亮缺失符号，但 CLI 模式（直接 Edit 工具）看不到。
+
+**修复**：在 import 行加回 `Req`：
+```typescript
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
+```
+
+**⚠️ 教训**：**改完代码立刻跑 `tsc --noEmit`**，不要等「全部改完再跑」。单文件改完就验证，能把错误从 10 个降到 1 个。
+
+---
+
+#### 踩坑 3：mock 类型收窄导致 `mockResolvedValueOnce` 失败
+
+**场景**：写 `nickel.service.spec.ts` 时，默认 mock 返回 happy path 的完整数据：
+
+```typescript
+const labelOcrService = {
+  recognizeLabel: jest.fn(async () => ({
+    labelData: { productName: '电解镍', batchNo: '...', ... },  // 推导出字面量类型
+    _ocrMeta: { barcodeFormat: 'CODE_128' as string | null },
+  })),
+};
+```
+
+后续要测试「条码失败」分支时：
+```typescript
+mocks.labelOcrService.recognizeLabel.mockResolvedValueOnce({
+  labelData: { ...所有字段 null..., barcode: null },  // ❌ TS2322: barcode null 不匹配 string
+  barcodeParsed: null,
+});
+```
+
+**根因**：jest 的 `mockResolvedValueOnce` 默认按**首次调用的返回类型**收窄。当你之后想传「不同 shape」的值，TypeScript 会拒绝。
+
+**修复**：显式声明 mock 返回类型为宽接口：
+```typescript
+recognizeLabel: jest.fn(async (): Promise<{
+  labelData: NickelLabelData;  // 用接口类型而非字面量
+  barcodeParsed: BarcodeParsed | null;
+  _ocrMeta: OcrMeta;
+}> => ({ ... }))
+```
+
+**⚠️ 教训**：**mock 的返回类型签名要尽量宽**。定义 `jest.fn((): MyInterface => ...)` 而不是依赖 TypeScript 自动推导。前者让 mock 可以返回任何 `MyInterface` 兼容值；后者会让 `mockResolvedValueOnce` 被锁死。
+
+---
+
+### 📊 修复前后对比
+
+| 指标 | 修复前 | 修复后 | 变化 |
+|---|---|---|---|
+| 后端测试套件 | 16 | **17** | +1 |
+| 后端测试用例 | 195 | **218** | +23 |
+| `nickel.service.ts` 覆盖率 | 13.58% | **95.06%** | +81.48 pp |
+| TypeScript 错误 | 0 | 0 | — |
+| ESLint 错误 | 配置失效 | **0 errors** | 修复 |
+| 未推送提交 | 4 | 0 | 推完 |
+| P0 安全问题 | 3 | **0** | 全修 |
+
+### ⚠️ 仍未解决的问题
+
+1. **Jest worker 进程泄漏** — `A worker process has failed to exit gracefully and has been force exited` 警告仍在。可能原因：`RateLimitGuard` 的 `setInterval(60000)` 在测试 teardown 时未 `clearInterval`。修复方向：`afterEach` / `afterAll` 显式销毁。
+
+2. **`nickel.controller.ts` 覆盖率 37.73%** — 仍偏低，特别是 `compare()` 流式图片处理路径。下一个 PR 应补 e2e（Supertest 已装）。
+
+3. **41 处 `no-explicit-any` warnings** — 主要是测试代码中的 `as any` 类型断言。建议按文件逐一收紧，优先收 NickelService 的 DI mock 类型。
+
+4. **前端零测试** — `mobile/` 3,349 行 Vue/TS 代码无任何回归保护。优先级低于后端，但下次大改前必须接入 Vitest。
+
+5. **`compareDto` 未使用** — `nickel.controller.ts:89` `@Body() compareDto: CompareDto` 形参实际未在 `compare()` 内引用（Multer 已消费 form-data）。建议删除或加上 `barcode` 透传。
+
+### 📚 此次修复方法论总结
+
+1. **审计要分维度**：安全 / 测试 / 工程化 / 性能 / 文档，五维交叉
+2. **优先级按「不可逆性」分**：安全 > 数据正确性 > 性能 > 代码风格
+3. **修复要带回归测试**：每修一个 P0 问题，至少加 1 个对应测试用例
+4. **lint 报错先理解再动手**：不要无脑 `let` → `const` / `var` → `import`
+5. **mock 类型签名要宽**：用接口而非字面量推断
+6. **改完立刻验证**：单文件改完就 `tsc --noEmit`，不要攒一堆再跑
+7. **fail-fast 优于 fail-open**：安全默认值应当「启动失败」而非「静默回退」
 - [ ] OCR 服务返回真实 25 位比例监控
 - [ ] `.env` 模板默认值改为 `localhost`，部署时手工覆盖
 - [ ] Vite config 加 preload `request.ts`，避免 dev 模式首帧延迟
